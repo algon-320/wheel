@@ -166,25 +166,25 @@ peg::parser! { pub grammar parser() for [Token] {
 
     rule literal_void() -> Box<TypedExpr>
         = [LParen] [RParen]
-        { TypedExpr { e: Expr::LiteralVoid, t: None }.into() }
+        { wrap(Expr::LiteralVoid) }
 
     rule literal_bool() -> Box<TypedExpr>
-        = [True]  { TypedExpr { e: Expr::LiteralBool(true),  t: None }.into() }
-        / [False] { TypedExpr { e: Expr::LiteralBool(false), t: None }.into() }
+        = [True]  { wrap(Expr::LiteralBool(true)) }
+        / [False] { wrap(Expr::LiteralBool(false)) }
 
     rule literal_u64() -> Box<TypedExpr>
         = [Number(n)]
         {?
             let n = n.parse().or(Err("u64 literal: integer too large"))?;
-            Ok(TypedExpr { e: Expr::LiteralU64(n), t: None }.into())
+            Ok(wrap(Expr::LiteralU64(n)))
         }
 
     rule variable() -> Box<TypedExpr>
-        = [Ident(name)] { TypedExpr { e: Expr::Var(name), t: None }.into() }
+        = [Ident(name)] { wrap(Expr::Var(name)) }
 
     rule variable_def() -> Box<TypedExpr>
         = [Let] [Ident(name)] [Equal] e1:expr() [In] e2:expr()
-        { TypedExpr { e: Expr::Let { name, value: e1, expr: e2 }, t: None }.into() }
+        { wrap(Expr::Let { name, value: e1, expr: e2 }) }
 
     rule if_expr() -> Box<TypedExpr>
         = [If] cond:expr() [LBrace] then_expr:expr() [RBrace] [Else] [LBrace] else_expr:expr() [RBrace]
