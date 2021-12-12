@@ -1,0 +1,15 @@
+fn add1(x: u64, y: u64) -> u64 {
+    let x = x + y in x
+}
+
+fn g() -> fn(u64,u64)->u64 {
+    add1
+}
+
+fn add2(x: u64, y: u64) -> u64 {
+    let a = g() in a(x*3, y*3)
+}
+
+fn main() -> u64 {
+    add2(11, 22)
+}

@@ -1,0 +1,27 @@
+fn fib(n: u64) -> u64 {
+    if n == 0 {
+        0
+    } else {
+        if n == 1 {
+            1
+        } else {
+            fib(n-1) + fib(n-2)
+        }
+    }
+}
+
+fn const12345(_n: u64) -> u64 {
+    12345
+}
+
+fn select(use_fib: bool) -> fn(u64)->u64 {
+    if use_fib {
+        fib
+    } else {
+        const12345
+    }
+}
+
+fn main() -> u64 {
+    let f = select(true) in f(30)
+}

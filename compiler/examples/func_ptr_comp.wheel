@@ -1,0 +1,10 @@
+fn f() -> () { () }
+fn g() -> () { () }
+
+fn comp_fptr(x: fn()->(), y: fn()->()) -> bool {
+    x == y
+}
+
+fn main() -> u64 {
+    if comp_fptr(f, f) { 1 } else { 0 }
+}

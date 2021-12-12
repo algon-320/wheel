@@ -1,0 +1,6 @@
+fn sub(l: u64, r: u64) -> u64 {
+    l - r
+}
+fn main() -> u64 {
+    sub(10, 2)
+}

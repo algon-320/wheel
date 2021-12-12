@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "spec",
+    "vm",
+    "compiler",
+    "disas",
+]
