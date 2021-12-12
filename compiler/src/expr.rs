@@ -12,11 +12,6 @@ pub enum Expr {
     LiteralBool(bool),
     LiteralU64(u64),
     Var(String),
-    Let {
-        name: String,
-        value: Box<TypedExpr>,
-        expr: Box<TypedExpr>,
-    },
 
     Add(Box<TypedExpr>, Box<TypedExpr>),
     Sub(Box<TypedExpr>, Box<TypedExpr>),
@@ -43,6 +38,12 @@ pub enum Expr {
         cond: Box<TypedExpr>,
         then_expr: Box<TypedExpr>,
         else_expr: Box<TypedExpr>,
+    },
+
+    Let {
+        name: String,
+        value: Box<TypedExpr>,
+        expr: Box<TypedExpr>,
     },
 
     Block(Vec<TypedExpr>, bool),

@@ -86,19 +86,6 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
             })?;
             expr.t = Some(ty.clone());
         }
-        Let {
-            name,
-            value,
-            expr: in_,
-        } => {
-            type_tree_impl(env, value)?;
-
-            let mut env = env.clone();
-            env.insert(name.clone(), value.t.clone().unwrap());
-            type_tree_impl(&mut env, in_)?;
-
-            expr.t = in_.t.clone();
-        }
 
         Add(lhs, rhs) | Sub(lhs, rhs) | Mul(lhs, rhs) | Div(lhs, rhs) => {
             type_tree_impl(env, lhs)?;
@@ -172,6 +159,20 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
             type_tree_impl(env, else_expr)?;
             assert_type_eq(&then_expr.t, else_expr.t.clone().unwrap())?;
             expr.t = Some(then_expr.t.clone().unwrap());
+        }
+
+        Let {
+            name,
+            value,
+            expr: in_,
+        } => {
+            type_tree_impl(env, value)?;
+
+            let mut env = env.clone();
+            env.insert(name.clone(), value.t.clone().unwrap());
+            type_tree_impl(&mut env, in_)?;
+
+            expr.t = in_.t.clone();
         }
 
         Block(exprs, is_void) => {

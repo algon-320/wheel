@@ -326,45 +326,6 @@ impl Compiler {
                 }
             }
 
-            Let {
-                name,
-                value,
-                expr: in_,
-            } => {
-                let var_ty = value.t.clone().unwrap();
-                let var_size = var_ty.size_of() as u64;
-                self.local_vars_size += var_size;
-                self.local_vars_size_max =
-                    std::cmp::max(self.local_vars_size_max, self.local_vars_size);
-                let offset = self.local_vars_size;
-
-                self.compile_expr(*value);
-
-                if var_size > 0 {
-                    self.emit(I::GetBp);
-                    self.emit(I::Lit64);
-                    self.emit(offset);
-                    self.emit(I::Sub64);
-                    match var_ty {
-                        Type::Void => unreachable!(),
-                        Type::Bool => self.emit(I::Store08),
-                        Type::U64 => self.emit(I::Store64),
-                        Type::FuncPtr { .. } => self.emit(I::Store64),
-                    }
-                }
-
-                let addr = Addr::BpRel(-(offset as i64));
-                let old = self.var_addr.insert(name.clone(), addr);
-
-                self.compile_expr(*in_);
-
-                if let Some(old) = old {
-                    self.var_addr.insert(name, old);
-                }
-
-                self.local_vars_size -= var_size;
-            }
-
             Add(lhs, rhs) => {
                 self.compile_expr(*lhs);
                 self.compile_expr(*rhs);
@@ -624,6 +585,45 @@ impl Compiler {
                 self.emit(I::Jump);
 
                 self.set_insertion_point(merge_bb);
+            }
+
+            Let {
+                name,
+                value,
+                expr: in_,
+            } => {
+                let var_ty = value.t.clone().unwrap();
+                let var_size = var_ty.size_of() as u64;
+                self.local_vars_size += var_size;
+                self.local_vars_size_max =
+                    std::cmp::max(self.local_vars_size_max, self.local_vars_size);
+                let offset = self.local_vars_size;
+
+                self.compile_expr(*value);
+
+                if var_size > 0 {
+                    self.emit(I::GetBp);
+                    self.emit(I::Lit64);
+                    self.emit(offset);
+                    self.emit(I::Sub64);
+                    match var_ty {
+                        Type::Void => unreachable!(),
+                        Type::Bool => self.emit(I::Store08),
+                        Type::U64 => self.emit(I::Store64),
+                        Type::FuncPtr { .. } => self.emit(I::Store64),
+                    }
+                }
+
+                let addr = Addr::BpRel(-(offset as i64));
+                let old = self.var_addr.insert(name.clone(), addr);
+
+                self.compile_expr(*in_);
+
+                if let Some(old) = old {
+                    self.var_addr.insert(name, old);
+                }
+
+                self.local_vars_size -= var_size;
             }
 
             Block(exprs, is_void) => {
