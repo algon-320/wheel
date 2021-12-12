@@ -82,6 +82,7 @@ struct Compiler {
 
     var_addr: HashMap<String, Addr>,
     local_vars_size: u64,
+    local_vars_size_max: u64,
 }
 
 impl Compiler {
@@ -93,6 +94,7 @@ impl Compiler {
             next_ptr_id: PointerId(1),
             var_addr: HashMap::new(),
             local_vars_size: 0,
+            local_vars_size_max: 0,
         }
     }
 
@@ -142,8 +144,9 @@ impl Compiler {
             }
 
             self.local_vars_size = 0;
+            self.local_vars_size_max = 0;
             self.compile_expr(*fun.body);
-            let local_vars_size = self.local_vars_size;
+            let local_vars_size = self.local_vars_size_max;
 
             // make space for local variables
             // FIXME
@@ -331,6 +334,8 @@ impl Compiler {
                 let var_ty = value.t.clone().unwrap();
                 let var_size = var_ty.size_of() as u64;
                 self.local_vars_size += var_size;
+                self.local_vars_size_max =
+                    std::cmp::max(self.local_vars_size_max, self.local_vars_size);
                 let offset = self.local_vars_size;
 
                 self.compile_expr(*value);
@@ -356,6 +361,8 @@ impl Compiler {
                 if let Some(old) = old {
                     self.var_addr.insert(name, old);
                 }
+
+                self.local_vars_size -= var_size;
             }
 
             Add(lhs, rhs) => {
