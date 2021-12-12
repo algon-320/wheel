@@ -136,16 +136,16 @@ peg::parser! { pub grammar parser() for [Token] {
             l:(@) [Equal] [Equal] r:@ { wrap(Expr::Eq(l, r)) }
             l:(@) [Bang] [Equal]  r:@ { wrap(Expr::Neq(l, r)) }
             --
-            l:(@) [Lt] [Equal]    r:@ { wrap(Expr::Leq(l, r)) }
-            l:(@) [Gt] [Equal]    r:@ { wrap(Expr::Geq(l, r)) }
+            l:(@) [Lt] [Equal] r:@    { wrap(Expr::Leq(l, r)) }
+            l:(@) [Gt] [Equal] r:@    { wrap(Expr::Geq(l, r)) }
             l:(@) [Lt] r:@            { wrap(Expr::Lt(l, r)) }
             l:(@) [Gt] r:@            { wrap(Expr::Gt(l, r)) }
             --
-            l:(@) [Plus]  r:@ { wrap(Expr::Add(l, r)) }
-            l:(@) [Minus] r:@ { wrap(Expr::Sub(l, r)) }
+            l:(@) [Plus]  r:@         { wrap(Expr::Add(l, r)) }
+            l:(@) [Minus] r:@         { wrap(Expr::Sub(l, r)) }
             --
-            l:(@) [Star]  r:@ { wrap(Expr::Mul(l, r)) }
-            l:(@) [Slash] r:@ { wrap(Expr::Div(l, r)) }
+            l:(@) [Star]  r:@         { wrap(Expr::Mul(l, r)) }
+            l:(@) [Slash] r:@         { wrap(Expr::Div(l, r)) }
             --
 
             e:block_expr() { e }
