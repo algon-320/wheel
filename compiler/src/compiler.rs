@@ -100,14 +100,19 @@ impl Compiler {
         let bid = self.next_bb;
         self.next_bb = BlockId(self.next_bb.0 + 1);
 
-        let ptr_id = self.next_ptr_id;
-        self.next_ptr_id = PointerId(self.next_ptr_id.0 + 1);
+        let ptr_id = self.new_pointer();
 
         let buf = vec![Ir::Pointee(ptr_id)];
         let bb = BasicBlock { id: bid, buf };
         self.bbs.insert(bid, bb);
 
         (bid, ptr_id)
+    }
+
+    fn new_pointer(&mut self) -> PointerId {
+        let ptr_id = self.next_ptr_id;
+        self.next_ptr_id = PointerId(self.next_ptr_id.0 + 1);
+        ptr_id
     }
 
     fn set_insertion_point(&mut self, id: BlockId) {
@@ -522,7 +527,7 @@ impl Compiler {
                 }
 
                 // push return address
-                let (cont_bb, cont_addr) = self.new_block();
+                let cont_addr = self.new_pointer();
                 self.emit(I::Lit64);
                 self.emit(Ir::Pointer(cont_addr));
 
@@ -543,7 +548,7 @@ impl Compiler {
                 // jump to the function
                 self.emit(I::Jump);
 
-                self.set_insertion_point(cont_bb);
+                self.emit(Ir::Pointee(cont_addr));
 
                 // save the return value
                 if ret_ty.size_of() > 0 {
