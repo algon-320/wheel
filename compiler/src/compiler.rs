@@ -71,7 +71,7 @@ impl std::fmt::Debug for BasicBlock {
 #[derive(Debug, Clone, Copy)]
 enum Addr {
     BpRel(i64),
-    Unresolved(PointerId),
+    Function(PointerId),
 }
 
 struct Compiler {
@@ -131,7 +131,7 @@ impl Compiler {
             let (func_bb, func_addr) = self.new_block();
             self.set_insertion_point(func_bb);
 
-            self.var_addr.insert(fun.name, Addr::Unresolved(func_addr));
+            self.var_addr.insert(fun.name, Addr::Function(func_addr));
 
             let mut old_vars = Vec::new();
             let mut offset = 16;
@@ -298,10 +298,6 @@ impl Compiler {
                 if ty.size_of() > 0 {
                     match self.var_addr.get(&name).copied() {
                         Some(addr) => match addr {
-                            Addr::Unresolved(u) => {
-                                self.emit(I::Lit64);
-                                self.emit(Ir::Pointer(u));
-                            }
                             Addr::BpRel(offset) => {
                                 self.emit(I::GetBp);
                                 self.emit(I::Lit64);
@@ -317,6 +313,10 @@ impl Compiler {
                                     Type::U64 => self.emit(I::Load64),
                                     Type::FuncPtr { .. } => self.emit(I::Load64),
                                 }
+                            }
+                            Addr::Function(p) => {
+                                self.emit(I::Lit64);
+                                self.emit(Ir::Pointer(p));
                             }
                         },
                         None => {
