@@ -111,9 +111,9 @@ peg::parser! { pub grammar parser() for [Token] {
     // type
 
     rule ty() -> Type
-        = obj_ty() / func_ptr_ty()
+        = data_ty() / func_ptr_ty()
 
-    rule obj_ty() -> Type
+    rule data_ty() -> Type
         = [LParen] [RParen] { Type::Void }
         / [Ident(ty)] {?
             match ty.as_str() {
