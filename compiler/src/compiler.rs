@@ -310,8 +310,9 @@ impl Compiler {
                                 match expr.t.unwrap() {
                                     Type::Void => unreachable!(),
                                     Type::Bool => self.emit(I::Load08),
-                                    Type::U64 => self.emit(I::Load64),
-                                    Type::FuncPtr { .. } => self.emit(I::Load64),
+                                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => {
+                                        self.emit(I::Load64)
+                                    }
                                 }
                             }
                             Addr::Function(p) => {
@@ -326,11 +327,15 @@ impl Compiler {
                 }
             }
 
+            AddrOf(location) => {
+                self.compile_location_expr(*location);
+            }
+
             Add(lhs, rhs) => {
                 self.compile_expr(*lhs);
                 self.compile_expr(*rhs);
                 match expr.t.unwrap() {
-                    Type::Void | Type::Bool | Type::FuncPtr { .. } => todo!(),
+                    Type::Void | Type::Bool | Type::Ptr(_) | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Add64),
                 }
             }
@@ -338,7 +343,7 @@ impl Compiler {
                 self.compile_expr(*lhs);
                 self.compile_expr(*rhs);
                 match expr.t.unwrap() {
-                    Type::Void | Type::Bool | Type::FuncPtr { .. } => todo!(),
+                    Type::Void | Type::Bool | Type::Ptr(_) | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Sub64),
                 }
             }
@@ -346,7 +351,7 @@ impl Compiler {
                 self.compile_expr(*lhs);
                 self.compile_expr(*rhs);
                 match expr.t.unwrap() {
-                    Type::Void | Type::Bool | Type::FuncPtr { .. } => todo!(),
+                    Type::Void | Type::Bool | Type::Ptr(_) | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Mul64),
                 }
             }
@@ -354,7 +359,7 @@ impl Compiler {
                 self.compile_expr(*lhs);
                 self.compile_expr(*rhs);
                 match expr.t.unwrap() {
-                    Type::Void | Type::Bool | Type::FuncPtr { .. } => todo!(),
+                    Type::Void | Type::Bool | Type::Ptr(_) | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Div64),
                 }
             }
@@ -370,7 +375,7 @@ impl Compiler {
                         self.emit(1 as u8);
                     }
                     Type::Bool => self.emit(I::Eq08),
-                    Type::U64 | Type::FuncPtr { .. } => self.emit(I::Eq64),
+                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Eq64),
                 }
             }
             Lt(lhs, rhs) => {
@@ -380,7 +385,7 @@ impl Compiler {
                 match ty {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Lt08),
-                    Type::U64 | Type::FuncPtr { .. } => self.emit(I::Lt64),
+                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Lt64),
                 }
             }
             Gt(lhs, rhs) => {
@@ -390,7 +395,7 @@ impl Compiler {
                 match ty {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Gt08),
-                    Type::U64 | Type::FuncPtr { .. } => self.emit(I::Gt64),
+                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Gt64),
                 }
             }
 
@@ -483,7 +488,7 @@ impl Compiler {
                         self.emit(I::Lit08);
                         self.emit(0xFF as u8);
                     }
-                    Type::U64 | Type::FuncPtr { .. } => {
+                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => {
                         self.emit(I::Lit64);
                         self.emit(0xFFFF_FFFF_FFFF_FFFF as u64);
                     }
@@ -532,8 +537,7 @@ impl Compiler {
                     match ret_ty {
                         Type::Void => unreachable!(),
                         Type::Bool => self.emit(I::Store08),
-                        Type::U64 => self.emit(I::Store64),
-                        Type::FuncPtr { .. } => self.emit(I::Store64),
+                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
                     }
                 }
 
@@ -546,8 +550,7 @@ impl Compiler {
                     match ty {
                         Type::Void => {}
                         Type::Bool => self.emit(I::Drop08),
-                        Type::U64 => self.emit(I::Drop64),
-                        Type::FuncPtr { .. } => self.emit(I::Drop64),
+                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Drop64),
                     }
                 }
             }
@@ -609,8 +612,7 @@ impl Compiler {
                     match var_ty {
                         Type::Void => unreachable!(),
                         Type::Bool => self.emit(I::Store08),
-                        Type::U64 => self.emit(I::Store64),
-                        Type::FuncPtr { .. } => self.emit(I::Store64),
+                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
                     }
                 }
 
@@ -633,8 +635,7 @@ impl Compiler {
                 match ty {
                     Type::Void => {}
                     Type::Bool => self.emit(I::Store08),
-                    Type::U64 => self.emit(I::Store64),
-                    Type::FuncPtr { .. } => self.emit(I::Store64),
+                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
                 }
             }
 
@@ -647,7 +648,7 @@ impl Compiler {
                         match ty {
                             Type::Void => {}
                             Type::Bool => self.emit(I::Drop08),
-                            Type::U64 | Type::FuncPtr { .. } => self.emit(I::Drop64),
+                            Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Drop64),
                         }
                     }
                 }

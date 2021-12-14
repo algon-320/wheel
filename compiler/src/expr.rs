@@ -12,6 +12,7 @@ pub enum Expr {
     LiteralBool(bool),
     LiteralU64(u64),
     Var(String),
+    AddrOf(Box<TypedLocationExpr>),
 
     Add(Box<TypedExpr>, Box<TypedExpr>),
     Sub(Box<TypedExpr>, Box<TypedExpr>),

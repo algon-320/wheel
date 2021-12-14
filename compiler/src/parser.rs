@@ -122,6 +122,7 @@ peg::parser! { pub grammar parser() for [Token] {
                 _ => Err("invalid type"),
             }
         }
+        / [Star] ty:data_ty() { Type::Ptr(Box::new(ty)) }
 
     rule func_ptr_ty() -> Type
         = [Fun] [LParen] params:(ty() ** [Comma]) [RParen] [Arrow] ret_ty:ty()
@@ -157,6 +158,7 @@ peg::parser! { pub grammar parser() for [Token] {
             e:literal_void() { e }
             e:literal_u64() { e }
             e:variable() { e }
+            e:addr_of() { e }
             e:variable_def() { e }
             e:if_expr() { e }
 
@@ -185,6 +187,9 @@ peg::parser! { pub grammar parser() for [Token] {
 
     rule variable() -> Box<TypedExpr>
         = [Ident(name)] { wrap(Expr::Var(name)) }
+
+    rule addr_of() -> Box<TypedExpr>
+        = [And] e: location_expr() { wrap(Expr::AddrOf(e)) }
 
     rule variable_def() -> Box<TypedExpr>
         = [Let] [Ident(name)] [Equal] e1:expr() [In] e2:expr()

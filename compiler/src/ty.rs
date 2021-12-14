@@ -7,6 +7,7 @@ pub enum Type {
     Void,
     Bool,
     U64,
+    Ptr(Box<Type>),
     FuncPtr {
         params: Vec<Type>,
         ret_ty: Box<Type>,
@@ -19,7 +20,7 @@ impl Type {
             Type::Void => 0,
             Type::Bool => 1,
             Type::U64 => 8,
-            Type::FuncPtr { .. } => 8,
+            Type::Ptr(_) | Type::FuncPtr { .. } => 8,
         }
     }
 }
@@ -85,6 +86,12 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
                 name: var_name.clone(),
             })?;
             expr.t = Some(ty.clone());
+        }
+
+        AddrOf(location) => {
+            type_location_expr_impl(env, location)?;
+            let inner_ty = location.t.clone().unwrap();
+            expr.t = Some(Type::Ptr(inner_ty.into()));
         }
 
         Add(lhs, rhs) | Sub(lhs, rhs) | Mul(lhs, rhs) | Div(lhs, rhs) => {
