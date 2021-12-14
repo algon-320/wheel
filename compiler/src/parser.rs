@@ -61,12 +61,13 @@ peg::parser! { grammar tokenizer() for str {
           (ws() / comment())*
           { PosToken { t: tok, begin, end } }
 
-    rule fun() -> Token = "fn" { Token::Fun }
-    rule if_() -> Token = "if" { Token::If }
-    rule else_() -> Token = "else" { Token::Else }
-    rule let_() -> Token = "let" { Token::Let }
-    rule in_() -> Token = "in" { Token::In }
-    rule boolean() -> Token = "true" { Token::True } / "false" { Token::False }
+    rule fun() -> Token = "fn" !alnum_() { Token::Fun }
+    rule if_() -> Token = "if" !alnum_() { Token::If }
+    rule else_() -> Token = "else" !alnum_() { Token::Else }
+    rule let_() -> Token = "let" !alnum_() { Token::Let }
+    rule in_() -> Token = "in" !alnum_() { Token::In }
+    rule boolean() -> Token
+        = "true" !alnum_() { Token::True } / "false" !alnum_() { Token::False }
     rule paren() -> Token
         = "(" { Token::LParen }
         / ")" { Token::RParen }
@@ -87,8 +88,10 @@ peg::parser! { grammar tokenizer() for str {
     rule pipe() -> Token = "|" { Token::Pipe }
     rule bang() -> Token = "!" { Token::Bang }
 
+    rule alnum_() = quiet!{['a'..='z'|'A'..='Z'|'0'..='9'|'_']}
+
     rule ident() -> Token
-        = ident: quiet!{$(['a'..='z'|'A'..='Z'|'_'] ['a'..='z'|'A'..='Z'|'_'|'0'..='9']*)}
+        = ident: quiet!{$(['a'..='z'|'A'..='Z'|'_'] alnum_()*)}
         { Token::Ident(ident.to_string()) }
         / expected!("ident")
 
@@ -155,13 +158,9 @@ peg::parser! { pub grammar parser() for [Token] {
             l:(@) [Slash] r:@         { wrap(Expr::Div(l, r)) }
             --
             [Star] e:@                { wrap(Expr::PtrDeref(e)) }
+            [And]  e:@                { wrap(Expr::AddrOf(e)) }
 
             e:block_expr() { e }
-            e:literal_bool() { e }
-            e:literal_void() { e }
-            e:literal_u64() { e }
-            e:variable() { e }
-            e:addr_of() { e }
             e:variable_def() { e }
             e:if_expr() { e }
 
@@ -169,6 +168,11 @@ peg::parser! { pub grammar parser() for [Token] {
                 let args = args.into_iter().map(|bx| *bx).collect();
                 wrap(Expr::Call { func, args })
             }
+
+            e:literal_bool() { e }
+            e:literal_void() { e }
+            e:literal_u64() { e }
+            e:variable() { e }
 
             [LParen] expr:expr() [RParen] { expr }
         }
@@ -190,9 +194,6 @@ peg::parser! { pub grammar parser() for [Token] {
 
     rule variable() -> Box<TypedExpr>
         = [Ident(name)] { wrap(Expr::Var(name)) }
-
-    rule addr_of() -> Box<TypedExpr>
-        = [And] e:expr() { wrap(Expr::AddrOf(e)) }
 
     rule variable_def() -> Box<TypedExpr>
         = [Let] [Ident(name)] [Equal] e1:expr() [In] e2:expr()
