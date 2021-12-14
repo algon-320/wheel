@@ -1,9 +1,10 @@
-use crate::ty::Type;
+use crate::ty::{Category, Type};
 
 #[derive(Debug, PartialEq)]
 pub struct TypedExpr {
     pub e: Expr,
     pub t: Option<Type>,
+    pub c: Option<Category>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -11,8 +12,10 @@ pub enum Expr {
     LiteralVoid,
     LiteralBool(bool),
     LiteralU64(u64),
+
+    AddrOf(Box<TypedExpr>),
+
     Var(String),
-    AddrOf(Box<TypedLocationExpr>),
     PtrDeref(Box<TypedExpr>),
 
     Add(Box<TypedExpr>, Box<TypedExpr>),
@@ -49,20 +52,9 @@ pub enum Expr {
     },
 
     Assignment {
-        location: Box<TypedLocationExpr>,
+        location: Box<TypedExpr>,
         value: Box<TypedExpr>,
     },
 
     Block(Vec<TypedExpr>, bool),
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TypedLocationExpr {
-    pub e: LocationExpr,
-    pub t: Option<Type>,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum LocationExpr {
-    Var(String),
 }

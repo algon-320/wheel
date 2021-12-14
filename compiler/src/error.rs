@@ -11,6 +11,7 @@ pub enum Error {
         expect: Option<Type>,
         actual: Type,
     },
+    CategoryMismatch,
     UndefVar {
         name: String,
     },

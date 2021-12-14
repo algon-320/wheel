@@ -1,9 +1,9 @@
 use log::debug;
 use std::collections::HashMap;
 
-use crate::expr::{Expr, LocationExpr, TypedExpr, TypedLocationExpr};
+use crate::expr::{Expr, TypedExpr};
 use crate::prog::Program;
-use crate::ty::Type;
+use crate::ty::{Category, Type};
 use spec::Instruction as I;
 
 #[derive(Debug, Clone, Copy)]
@@ -223,11 +223,13 @@ impl Compiler {
                             params: vec![],
                             ret_ty: Type::U64.into(),
                         }),
+                        c: Some(Category::Regular),
                     }
                     .into(),
                     args: vec![],
                 },
                 t: Some(Type::U64),
+                c: Some(Category::Regular),
             });
             self.emit(I::Abort);
         }
@@ -293,8 +295,10 @@ impl Compiler {
                 self.emit(I::Lit64);
                 self.emit(v);
             }
+
             Var(name) => {
                 let ty = expr.t.as_ref().unwrap();
+                let cat = expr.c.unwrap();
                 if ty.size_of() > 0 {
                     match self.var_addr.get(&name).copied() {
                         Some(addr) => match addr {
@@ -307,17 +311,24 @@ impl Compiler {
                                 } else {
                                     self.emit(I::Sub64); // local variable
                                 }
-                                match expr.t.unwrap() {
-                                    Type::Void => unreachable!(),
-                                    Type::Bool => self.emit(I::Load08),
-                                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => {
-                                        self.emit(I::Load64)
+
+                                if cat == Category::Regular {
+                                    match expr.t.unwrap() {
+                                        Type::Void => unreachable!(),
+                                        Type::Bool => self.emit(I::Load08),
+                                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => {
+                                            self.emit(I::Load64)
+                                        }
                                     }
                                 }
                             }
                             Addr::Function(p) => {
-                                self.emit(I::Lit64);
-                                self.emit(Ir::Pointer(p));
+                                if cat == Category::Regular {
+                                    self.emit(I::Lit64);
+                                    self.emit(Ir::Pointer(p));
+                                } else {
+                                    todo!("function cannot be a location expression");
+                                }
                             }
                         },
                         None => {
@@ -328,15 +339,17 @@ impl Compiler {
             }
 
             AddrOf(location) => {
-                self.compile_location_expr(*location);
+                self.compile_expr(*location);
             }
 
             PtrDeref(ptr) => {
                 self.compile_expr(*ptr);
-                match expr.t.unwrap() {
-                    Type::Void => todo!("deref of *()"),
-                    Type::Bool => self.emit(I::Load08),
-                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Load64),
+                if expr.c.unwrap() == Category::Regular {
+                    match expr.t.unwrap() {
+                        Type::Void => todo!("deref of *()"),
+                        Type::Bool => self.emit(I::Load08),
+                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Load64),
+                    }
                 }
             }
 
@@ -420,6 +433,7 @@ impl Compiler {
                 self.compile_expr(TypedExpr {
                     e: Eq(lhs, rhs),
                     t: expr.t,
+                    c: Some(Category::Regular),
                 });
                 self.emit(I::Lit08);
                 self.emit(0 as u8);
@@ -430,6 +444,7 @@ impl Compiler {
                 self.compile_expr(TypedExpr {
                     e: Gt(lhs, rhs),
                     t: expr.t,
+                    c: Some(Category::Regular),
                 });
                 self.emit(I::Lit08);
                 self.emit(0 as u8);
@@ -440,6 +455,7 @@ impl Compiler {
                 self.compile_expr(TypedExpr {
                     e: Lt(lhs, rhs),
                     t: expr.t,
+                    c: Some(Category::Regular),
                 });
                 self.emit(I::Lit08);
                 self.emit(0 as u8);
@@ -640,7 +656,7 @@ impl Compiler {
             Assignment { location, value } => {
                 let ty = value.t.clone().unwrap();
                 self.compile_expr(*value);
-                self.compile_location_expr(*location);
+                self.compile_expr(*location);
                 match ty {
                     Type::Void => {}
                     Type::Bool => self.emit(I::Store08),
@@ -658,36 +674,6 @@ impl Compiler {
                             Type::Void => {}
                             Type::Bool => self.emit(I::Drop08),
                             Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Drop64),
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fn compile_location_expr(&mut self, expr: TypedLocationExpr) {
-        match expr.e {
-            LocationExpr::Var(name) => {
-                let ty = expr.t.as_ref().unwrap();
-                if ty.size_of() > 0 {
-                    match self.var_addr.get(&name).copied() {
-                        Some(addr) => match addr {
-                            Addr::BpRel(offset) => {
-                                self.emit(I::GetBp);
-                                self.emit(I::Lit64);
-                                self.emit(offset.abs() as u64);
-                                if offset > 0 {
-                                    self.emit(I::Add64); // function argument
-                                } else {
-                                    self.emit(I::Sub64); // local variable
-                                }
-                            }
-                            Addr::Function(_) => {
-                                panic!("function designator cannot be a lvalue");
-                            }
-                        },
-                        None => {
-                            todo!("undefined variable");
                         }
                     }
                 }

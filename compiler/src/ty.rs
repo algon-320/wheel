@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::expr::{Expr, LocationExpr, TypedExpr, TypedLocationExpr};
+use crate::expr::{Expr, TypedExpr};
 use crate::prog::Program;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,6 +35,12 @@ fn assert_type_eq(ty: &Option<Type>, expect: Type) -> Result<(), Error> {
     } else {
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Category {
+    Location,
+    Regular,
 }
 
 use std::collections::HashMap;
@@ -89,20 +95,19 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
         }
 
         AddrOf(location) => {
-            type_location_expr_impl(env, location)?;
+            location.c = Some(Category::Location);
+            type_tree_impl(env, location)?;
             let inner_ty = location.t.clone().unwrap();
             expr.t = Some(Type::Ptr(inner_ty.into()));
         }
 
         PtrDeref(ptr) => {
             type_tree_impl(env, ptr)?;
-            match ptr.t.clone().unwrap() {
-                Type::Ptr(inner) => {
-                    expr.t = Some(*inner);
-                }
-                _actual => {
-                    todo!("dereference of non-pointer value");
-                }
+            let ty = ptr.t.clone().unwrap();
+            if let Type::Ptr(inner) = ty {
+                expr.t = Some(*inner);
+            } else {
+                todo!("dereference of non-pointer type: {:?}", ty);
             }
         }
 
@@ -195,7 +200,9 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
         }
 
         Assignment { location, value } => {
-            type_location_expr_impl(env, location)?;
+            location.c = Some(Category::Location);
+            type_tree_impl(env, location)?;
+
             type_tree_impl(env, value)?;
 
             assert_type_eq(&location.t, value.t.clone().unwrap())?;
@@ -214,17 +221,19 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
             expr.t = Some(ty);
         }
     }
-    Ok(())
-}
 
-fn type_location_expr_impl(env: &mut TypeEnv, expr: &mut TypedLocationExpr) -> Result<(), Error> {
-    match &mut expr.e {
-        LocationExpr::Var(var_name) => {
-            let ty = env.get(var_name).ok_or_else(|| Error::UndefVar {
-                name: var_name.clone(),
-            })?;
-            expr.t = Some(ty.clone());
+    // verify category
+    match expr.e {
+        Var(_) | PtrDeref(_) => {}
+        _ => {
+            if expr.c == Some(Category::Location) {
+                return Err(Error::CategoryMismatch);
+            }
         }
     }
+    if expr.c.is_none() {
+        expr.c = Some(Category::Regular);
+    }
+
     Ok(())
 }
