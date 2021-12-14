@@ -1,13 +1,20 @@
-fn f() -> () { () }
+fn add1(p: *u64) -> () {
+    *p = *p + 1
+}
 
-fn g(x: u64) -> () {
-    if x == 0 {
-        f()
+fn repeat(n: u64, f: fn(*u64)->(), p: *u64) -> () {
+    if n == 0 {
+        ()
     } else {
-        let _x = f() in g(x - 1)
+        let _ign = f(p) in
+        repeat(n - 1, f, p)
     }
 }
 
 fn main() -> u64 {
-    { g(10); 123 }
+    let x = 0 in
+    {
+        repeat(10, add1, &x);
+        x // should be 10
+    }
 }
