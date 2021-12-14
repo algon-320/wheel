@@ -16,6 +16,10 @@ struct CliOpt {
     #[structopt(name = "bin", parse(from_os_str))]
     bin: PathBuf,
 
+    /// memory size in bytes
+    #[structopt(short = "m", long = "mem", default_value = "4096")]
+    memory_size: usize,
+
     #[structopt(long = "debug")]
     debug: bool,
 }
@@ -29,7 +33,8 @@ fn main() {
     let opt = CliOpt::from_args();
     let bin = std::fs::read(&opt.bin).unwrap();
 
-    let mut mem = Memory::new(0x1000);
+    log::info!("memory size: {}", opt.memory_size);
+    let mut mem = Memory::new(opt.memory_size);
     for (i, &byte) in bin.iter().enumerate() {
         mem.write(i as u64, byte).unwrap();
     }
