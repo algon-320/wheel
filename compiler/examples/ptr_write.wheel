@@ -1,0 +1,13 @@
+fn ptr_incr(p: *u64) -> () {
+    *p = *p + 1
+}
+
+fn main() -> u64 {
+    let x = 0 in
+    {
+        ptr_incr(&x);
+        ptr_incr(&x);
+        ptr_incr(&x);
+        x
+    }
+}
