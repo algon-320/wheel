@@ -46,5 +46,21 @@ pub enum Expr {
         expr: Box<TypedExpr>,
     },
 
+    Assignment {
+        location: Box<TypedLocationExpr>,
+        value: Box<TypedExpr>,
+    },
+
     Block(Vec<TypedExpr>, bool),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TypedLocationExpr {
+    pub e: LocationExpr,
+    pub t: Option<Type>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum LocationExpr {
+    Var(String),
 }

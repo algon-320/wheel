@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::expr::{Expr, TypedExpr};
+use crate::expr::{Expr, LocationExpr, TypedExpr, TypedLocationExpr};
 use crate::prog::{FuncDef, Parameter, Program};
 use crate::ty::Type;
 
@@ -101,6 +101,9 @@ peg::parser! { grammar tokenizer() for str {
 fn wrap(e: Expr) -> Box<TypedExpr> {
     Box::new(TypedExpr { e, t: None })
 }
+fn wrap_l(e: LocationExpr) -> Box<TypedLocationExpr> {
+    Box::new(TypedLocationExpr { e, t: None })
+}
 
 peg::parser! { pub grammar parser() for [Token] {
     use Token::*;
@@ -148,6 +151,7 @@ peg::parser! { pub grammar parser() for [Token] {
             l:(@) [Slash] r:@         { wrap(Expr::Div(l, r)) }
             --
 
+            e:assignment() { e }
             e:block_expr() { e }
             e:literal_bool() { e }
             e:literal_void() { e }
@@ -190,12 +194,24 @@ peg::parser! { pub grammar parser() for [Token] {
         = [If] cond:expr() [LBrace] then_expr:expr() [RBrace] [Else] [LBrace] else_expr:expr() [RBrace]
         { wrap(Expr::If { cond, then_expr, else_expr }) }
 
+    rule assignment() -> Box<TypedExpr>
+        = location:location_expr() [Equal] value:expr()
+        { wrap(Expr::Assignment { location, value }) }
+
     rule block_expr() -> Box<TypedExpr>
         = [LBrace] exprs:(expr() ** [SemiColon]) is_void:([SemiColon]?) [RBrace]
         {
             let exprs = exprs.into_iter().map(|bx| *bx).collect();
             wrap(Expr::Block(exprs, is_void.is_some()))
         }
+
+    // location expression (a.k.a. "lvalue" expression)
+
+    rule location_expr() -> Box<TypedLocationExpr>
+        = lvalue_var()
+
+    rule lvalue_var() -> Box<TypedLocationExpr>
+        = [Ident(name)] { wrap_l(LocationExpr::Var(name)) }
 
     // function
 

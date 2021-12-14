@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::expr::{Expr, TypedExpr};
+use crate::expr::{Expr, LocationExpr, TypedExpr, TypedLocationExpr};
 use crate::prog::Program;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -175,6 +175,14 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
             expr.t = in_.t.clone();
         }
 
+        Assignment { location, value } => {
+            type_location_expr_impl(env, location)?;
+            type_tree_impl(env, value)?;
+
+            assert_type_eq(&location.t, value.t.clone().unwrap())?;
+            expr.t = Some(Type::Void);
+        }
+
         Block(exprs, is_void) => {
             let mut ty = Type::Void;
             for e in exprs {
@@ -185,6 +193,18 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
                 ty = Type::Void;
             }
             expr.t = Some(ty);
+        }
+    }
+    Ok(())
+}
+
+fn type_location_expr_impl(env: &mut TypeEnv, expr: &mut TypedLocationExpr) -> Result<(), Error> {
+    match &mut expr.e {
+        LocationExpr::Var(var_name) => {
+            let ty = env.get(var_name).ok_or_else(|| Error::UndefVar {
+                name: var_name.clone(),
+            })?;
+            expr.t = Some(ty.clone());
         }
     }
     Ok(())

@@ -1,7 +1,7 @@
 use log::debug;
 use std::collections::HashMap;
 
-use crate::expr::{Expr, TypedExpr};
+use crate::expr::{Expr, LocationExpr, TypedExpr, TypedLocationExpr};
 use crate::prog::Program;
 use crate::ty::Type;
 use spec::Instruction as I;
@@ -626,6 +626,18 @@ impl Compiler {
                 self.local_vars_size -= var_size;
             }
 
+            Assignment { location, value } => {
+                let ty = value.t.clone().unwrap();
+                self.compile_expr(*value);
+                self.compile_location_expr(*location);
+                match ty {
+                    Type::Void => {}
+                    Type::Bool => self.emit(I::Store08),
+                    Type::U64 => self.emit(I::Store64),
+                    Type::FuncPtr { .. } => self.emit(I::Store64),
+                }
+            }
+
             Block(exprs, is_void) => {
                 let len = exprs.len();
                 for (i, e) in exprs.into_iter().enumerate() {
@@ -636,6 +648,36 @@ impl Compiler {
                             Type::Void => {}
                             Type::Bool => self.emit(I::Drop08),
                             Type::U64 | Type::FuncPtr { .. } => self.emit(I::Drop64),
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn compile_location_expr(&mut self, expr: TypedLocationExpr) {
+        match expr.e {
+            LocationExpr::Var(name) => {
+                let ty = expr.t.as_ref().unwrap();
+                if ty.size_of() > 0 {
+                    match self.var_addr.get(&name).copied() {
+                        Some(addr) => match addr {
+                            Addr::BpRel(offset) => {
+                                self.emit(I::GetBp);
+                                self.emit(I::Lit64);
+                                self.emit(offset.abs() as u64);
+                                if offset > 0 {
+                                    self.emit(I::Add64); // function argument
+                                } else {
+                                    self.emit(I::Sub64); // local variable
+                                }
+                            }
+                            Addr::Function(_) => {
+                                panic!("function designator cannot be a lvalue");
+                            }
+                        },
+                        None => {
+                            todo!("undefined variable");
                         }
                     }
                 }
