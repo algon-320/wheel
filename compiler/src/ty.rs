@@ -28,7 +28,7 @@ impl Type {
 fn assert_type_eq(ty: &Option<Type>, expect: Type) -> Result<(), Error> {
     let ty = ty.as_ref().expect("not yet typed");
     if ty != &expect {
-        Err(Error::TypeMismach {
+        Err(Error::TypeMismatch {
             expect: Some(expect),
             actual: ty.clone(),
         })

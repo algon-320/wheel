@@ -7,7 +7,7 @@ pub enum Error {
         column: usize,
         msg: String,
     },
-    TypeMismach {
+    TypeMismatch {
         expect: Option<Type>,
         actual: Type,
     },
