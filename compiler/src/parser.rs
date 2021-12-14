@@ -151,6 +151,7 @@ peg::parser! { pub grammar parser() for [Token] {
             l:(@) [Star]  r:@         { wrap(Expr::Mul(l, r)) }
             l:(@) [Slash] r:@         { wrap(Expr::Div(l, r)) }
             --
+            [Star] e:@                { wrap(Expr::PtrDeref(e)) }
 
             e:assignment() { e }
             e:block_expr() { e }

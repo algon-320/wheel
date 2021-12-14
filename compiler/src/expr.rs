@@ -13,6 +13,7 @@ pub enum Expr {
     LiteralU64(u64),
     Var(String),
     AddrOf(Box<TypedLocationExpr>),
+    PtrDeref(Box<TypedExpr>),
 
     Add(Box<TypedExpr>, Box<TypedExpr>),
     Sub(Box<TypedExpr>, Box<TypedExpr>),

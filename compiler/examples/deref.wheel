@@ -1,0 +1,9 @@
+fn add(x: *u64, y: *u64) -> u64 {
+    *x + *y
+}
+
+fn main() -> u64 {
+    let x = 123 in
+    let y = *&x in
+    add(&x, &y)
+}

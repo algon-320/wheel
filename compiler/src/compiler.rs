@@ -331,6 +331,15 @@ impl Compiler {
                 self.compile_location_expr(*location);
             }
 
+            PtrDeref(ptr) => {
+                self.compile_expr(*ptr);
+                match expr.t.unwrap() {
+                    Type::Void => todo!("deref of *()"),
+                    Type::Bool => self.emit(I::Load08),
+                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Load64),
+                }
+            }
+
             Add(lhs, rhs) => {
                 self.compile_expr(*lhs);
                 self.compile_expr(*rhs);

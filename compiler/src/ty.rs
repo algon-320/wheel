@@ -94,6 +94,18 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
             expr.t = Some(Type::Ptr(inner_ty.into()));
         }
 
+        PtrDeref(ptr) => {
+            type_tree_impl(env, ptr)?;
+            match ptr.t.clone().unwrap() {
+                Type::Ptr(inner) => {
+                    expr.t = Some(*inner);
+                }
+                _actual => {
+                    todo!("dereference of non-pointer value");
+                }
+            }
+        }
+
         Add(lhs, rhs) | Sub(lhs, rhs) | Mul(lhs, rhs) | Div(lhs, rhs) => {
             type_tree_impl(env, lhs)?;
             type_tree_impl(env, rhs)?;
