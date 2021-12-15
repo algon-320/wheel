@@ -918,6 +918,29 @@ fn get_sp() {
 }
 
 #[test]
+fn set_sp() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::SetSp.into()]);
+
+    mem.write(0x500, 0xAA).unwrap();
+    mem.write(0x123, 0xBB).unwrap();
+
+    let mut cpu = Cpu::new(mem.clone());
+    cpu.stack_push::<u64>(0x500);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.sp, 0x500);
+    assert_eq!(cpu.stack_pop::<u8>(), 0xAA);
+    assert_eq!(cpu.sp, 0x500 + 1);
+
+    let mut cpu = Cpu::new(mem.clone());
+    cpu.stack_push::<u64>(0x123);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.sp, 0x123);
+    assert_eq!(cpu.stack_pop::<u8>(), 0xBB);
+    assert_eq!(cpu.sp, 0x123 + 1);
+}
+
+#[test]
 fn abort() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Abort.into()]);

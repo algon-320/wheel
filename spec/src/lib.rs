@@ -53,8 +53,9 @@ pub enum Instruction {
     GetIp = 47,
     SetBp = 48,
     GetBp = 49,
-    GetSp = 50,
-    Abort = 51,
+    SetSp = 50,
+    GetSp = 51,
+    Abort = 52,
 }
 
 impl Into<u8> for Instruction {

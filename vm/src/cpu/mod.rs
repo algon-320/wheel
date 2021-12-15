@@ -93,6 +93,7 @@ impl Cpu {
             GetBp => self.get_bp(),
             SetBp => self.set_bp(),
             GetSp => self.get_sp(),
+            SetSp => self.set_sp(),
             Abort => return Err(()),
         }
         trace!("");
@@ -268,6 +269,13 @@ impl Cpu {
     fn get_sp(&mut self) {
         trace!("get_sp: sp={}", self.sp);
         self.stack_push::<u64>(self.sp);
+    }
+
+    #[inline]
+    fn set_sp(&mut self) {
+        let new_sp = self.stack_pop::<u64>();
+        trace!("set_sp: sp={}", new_sp);
+        self.sp = new_sp;
     }
 }
 

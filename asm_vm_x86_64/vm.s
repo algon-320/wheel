@@ -350,6 +350,10 @@ set_bp:
 get_bp:
   pushq %rbp
   jmp   eval
+set_sp:
+  popq  %rax
+  movq  %rax, %rsp
+  jmp   eval
 get_sp:
   pushq %rsp
   jmp   eval
@@ -525,6 +529,9 @@ vm_main:
   movq  %rbx, (%rax)
   addq  $8, %rax
   lea   get_bp(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   set_sp(%rip), %rbx
   movq  %rbx, (%rax)
   addq  $8, %rax
   lea   get_sp(%rip), %rbx

@@ -49,6 +49,7 @@ op_label = [
    "get_ip",
    "set_bp",
    "get_bp",
+   "set_sp",
    "get_sp",
    "abort",
 ]
