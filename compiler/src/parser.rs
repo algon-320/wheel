@@ -8,6 +8,8 @@ pub enum Token {
     Fun,
     If,
     Else,
+    Loop,
+    Break,
     Let,
     In,
     LParen,
@@ -53,7 +55,8 @@ peg::parser! { grammar tokenizer() for str {
     rule token() -> PosToken
         = (ws() / comment())*
           begin:position!() tok:(
-            fun() / if_() / else_() / let_() / in_() / boolean() / paren() / arrow() /
+            fun() / if_() / else_() / loop_() / break_() / let_() / in_() /
+            boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
             colon() / semicolon() / comma() / equal() / lt() / gt() /
             and() / pipe() / bang() / ident() / number()
@@ -64,6 +67,8 @@ peg::parser! { grammar tokenizer() for str {
     rule fun() -> Token = "fn" !alnum_() { Token::Fun }
     rule if_() -> Token = "if" !alnum_() { Token::If }
     rule else_() -> Token = "else" !alnum_() { Token::Else }
+    rule loop_() -> Token = "loop" !alnum_() { Token::Loop }
+    rule break_() -> Token = "break" !alnum_() { Token::Break }
     rule let_() -> Token = "let" !alnum_() { Token::Let }
     rule in_() -> Token = "in" !alnum_() { Token::In }
     rule boolean() -> Token
@@ -163,6 +168,8 @@ peg::parser! { pub grammar parser() for [Token] {
             e:block_expr() { e }
             e:variable_def() { e }
             e:if_expr() { e }
+            e:loop_expr() { e }
+            e:break_expr() { e }
 
             func:@ [LParen] args:(expr() ** [Comma]) [RParen] {
                 let args = args.into_iter().map(|bx| *bx).collect();
@@ -202,6 +209,13 @@ peg::parser! { pub grammar parser() for [Token] {
     rule if_expr() -> Box<TypedExpr>
         = [If] cond:expr() then_expr:block_expr() [Else] else_expr:block_expr()
         { wrap(Expr::If { cond, then_expr, else_expr }) }
+
+    rule loop_expr() -> Box<TypedExpr>
+        = [Loop] body:block_expr()
+        { wrap(Expr::Loop { body }) }
+
+    rule break_expr() -> Box<TypedExpr>
+        = [Break] { wrap(Expr::Break) }
 
     rule block_expr() -> Box<TypedExpr>
         = [LBrace] exprs:(expr() ** [SemiColon]) is_void:([SemiColon]?) [RBrace]

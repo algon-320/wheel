@@ -185,6 +185,15 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
             expr.t = Some(then_expr.t.clone().unwrap());
         }
 
+        Loop { body } => {
+            type_tree_impl(env, body)?;
+            expr.t = Some(Type::Void);
+        }
+
+        Break => {
+            expr.t = Some(Type::Void);
+        }
+
         Let {
             name,
             value,

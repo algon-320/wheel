@@ -1,0 +1,22 @@
+fn main() -> u64 {
+    let cnt = 0 in
+    let a = 0 in {
+        loop { // loop A
+            if a == 2 {
+                break; // loop A
+            } else {
+                let b = 0 in
+                loop { // loop B
+                    if b == 5 {
+                        break; // loop B
+                    } else {
+                        cnt = cnt + 1;
+                        b = b + 1;
+                    };
+                };
+                a = a + 1;
+            }
+        };
+        cnt
+    }
+}

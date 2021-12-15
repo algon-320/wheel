@@ -1,5 +1,6 @@
 use log::debug;
 use std::collections::HashMap;
+type Stack<T> = std::vec::Vec<T>;
 
 use crate::expr::{Expr, TypedExpr};
 use crate::prog::Program;
@@ -74,6 +75,10 @@ enum Addr {
     Function(PointerId),
 }
 
+struct LoopContext {
+    end_of_loop: PointerId,
+}
+
 struct Compiler {
     bbs: HashMap<BlockId, BasicBlock>,
     emit_bb: BlockId,
@@ -83,6 +88,7 @@ struct Compiler {
     var_addr: HashMap<String, Addr>,
     local_vars_size: u64,
     local_vars_size_max: u64,
+    loop_context: Stack<LoopContext>,
 }
 
 impl Compiler {
@@ -95,6 +101,7 @@ impl Compiler {
             var_addr: HashMap::new(),
             local_vars_size: 0,
             local_vars_size_max: 0,
+            loop_context: Stack::new(),
         }
     }
 
@@ -624,6 +631,39 @@ impl Compiler {
                 self.emit(I::Jump);
 
                 self.set_insertion_point(merge_bb);
+            }
+
+            Loop { body } => {
+                let cont = self.new_pointer();
+                self.loop_context.push(LoopContext { end_of_loop: cont });
+                {
+                    let begin = self.new_pointer();
+                    self.emit(Ir::Pointee(begin));
+
+                    self.compile_expr(*body);
+
+                    self.emit(I::Lit64);
+                    self.emit(Ir::Pointer(begin));
+                    self.emit(I::Jump);
+                }
+                self.loop_context.pop();
+                self.emit(Ir::Pointee(cont));
+            }
+
+            Break => {
+                // FIXME: Drop temporal values when getting out of a loop
+                // Current implementation possibly lets temporal values remain
+                // on the stack, and causes "stack leak".
+                // e.g. `loop { loop { f(break, 123) } }`
+                // endlessly consumes the stack.
+
+                let cont = match self.loop_context.last() {
+                    None => todo!("`break` only allowed inside a loop"),
+                    Some(lc) => lc.end_of_loop,
+                };
+                self.emit(I::Lit64);
+                self.emit(Ir::Pointer(cont));
+                self.emit(I::Jump);
             }
 
             Let {

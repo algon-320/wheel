@@ -45,6 +45,11 @@ pub enum Expr {
         else_expr: Box<TypedExpr>,
     },
 
+    Loop {
+        body: Box<TypedExpr>,
+    },
+    Break,
+
     Let {
         name: String,
         value: Box<TypedExpr>,
