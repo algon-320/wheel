@@ -219,8 +219,7 @@ peg::parser! { pub grammar parser() for [Token] {
     rule function_def() -> FuncDef
         = [Fun] [Ident(name)]
             [LParen] ps:(param() ** [Comma]) [RParen]
-            [Arrow] ret_ty:ty()
-            [LBrace] body:expr() [RBrace]
+            [Arrow] ret_ty:ty() body:expr()
         { FuncDef { name, params: ps, ret_ty, body } }
 
     // program

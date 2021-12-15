@@ -1,5 +1,5 @@
-fn f() -> () { () }
-fn g() -> () { () }
+fn f() -> () {}
+fn g() -> () {}
 
 fn comp_fptr(x: fn()->(), y: fn()->()) -> bool {
     x == y

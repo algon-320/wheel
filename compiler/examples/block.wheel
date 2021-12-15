@@ -1,9 +1,17 @@
-fn f() -> bool { false }
+fn f() -> bool false
+fn f_() -> bool { false }
+fn f__() -> bool {{ false }}
+fn f___() -> bool {{{ false}}}
 
-fn g() -> () { {1; 2; 3;} }
+fn g() -> () { 1; 2; 3; }
 
 fn h() -> u64 { 123 }
 
 fn main() -> u64 {
-    { f(); g(); h() }
+    f();
+    f_();
+    f__();
+    f___();
+    g();
+    h()
 }
