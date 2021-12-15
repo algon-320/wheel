@@ -200,7 +200,7 @@ peg::parser! { pub grammar parser() for [Token] {
         { wrap(Expr::Let { name, value: e1, expr: e2 }) }
 
     rule if_expr() -> Box<TypedExpr>
-        = [If] cond:expr() [LBrace] then_expr:expr() [RBrace] [Else] [LBrace] else_expr:expr() [RBrace]
+        = [If] cond:expr() then_expr:block_expr() [Else] else_expr:block_expr()
         { wrap(Expr::If { cond, then_expr, else_expr }) }
 
     rule block_expr() -> Box<TypedExpr>
@@ -219,7 +219,7 @@ peg::parser! { pub grammar parser() for [Token] {
     rule function_def() -> FuncDef
         = [Fun] [Ident(name)]
             [LParen] ps:(param() ** [Comma]) [RParen]
-            [Arrow] ret_ty:ty() body:expr()
+            [Arrow] ret_ty:ty() body:block_expr()
         { FuncDef { name, params: ps, ret_ty, body } }
 
     // program

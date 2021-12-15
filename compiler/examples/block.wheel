@@ -1,7 +1,6 @@
-fn f() -> bool false
-fn f_() -> bool { false }
-fn f__() -> bool {{ false }}
-fn f___() -> bool {{{ false}}}
+fn f() -> bool { false }
+fn f_() -> bool {{ false }}
+fn f__() -> bool {{{ false}}}
 
 fn g() -> () { 1; 2; 3; }
 
@@ -11,7 +10,6 @@ fn main() -> u64 {
     f();
     f_();
     f__();
-    f___();
     g();
     h()
 }
