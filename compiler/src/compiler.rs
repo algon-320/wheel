@@ -147,6 +147,7 @@ impl Compiler {
             self.local_vars_size_max = 0;
             self.compile_expr(*fun.body);
             let local_vars_size = self.local_vars_size_max;
+            debug!("local_vars_size: {}", local_vars_size);
 
             // make space for local variables
             // FIXME
@@ -158,46 +159,63 @@ impl Compiler {
 
                 bb.buf.push(old_buf[0]); // pointer
                 self.set_insertion_point(func_bb);
+                {
+                    // SP = SP - local_vars_size
+                    self.emit(I::GetSp);
+                    self.emit(I::Lit64);
+                    self.emit(local_vars_size as u64);
+                    self.emit(I::Sub64);
+                    self.emit(I::SetSp);
 
-                debug!("local_vars_size: {}", local_vars_size);
-                let mut r = local_vars_size;
-                while r > 0 {
-                    if r >= 8 {
-                        self.emit(I::Lit64);
-                        self.emit(0 as u64);
-                        r -= 8;
-                    } else if r >= 4 {
-                        self.emit(I::Lit32);
-                        self.emit(0 as u32);
-                        r -= 4;
-                    } else if r >= 2 {
-                        self.emit(I::Lit16);
-                        self.emit(0 as u16);
-                        r -= 2;
-                    } else {
-                        self.emit(I::Lit08);
-                        self.emit(0 as u8);
-                        r -= 1;
-                    }
+                    let bb = self.bbs.get_mut(&func_bb).unwrap();
+                    bb.buf.extend(old_buf.drain(1..));
                 }
-
-                let bb = self.bbs.get_mut(&func_bb).unwrap();
-                bb.buf.extend(old_buf.drain(1..));
-
                 self.set_insertion_point(old_bb);
             }
 
             // Return
             {
+                //                <-- SP
+                // [ ret val    ]
+                // [ local vars ]
+                // -------------- <-- BP
+                // [ caller BP  ]
+                // [ return IP  ]
+                // [ args       ]
+                // [ ret val    ]
+                // [ ********** ]
+
+                // save the return value
+                let ret_ty = &fun.ret_ty;
+                if ret_ty.size_of() > 0 {
+                    let args_size: u64 = fun.params.iter().map(|p| p.ty.size_of() as u64).sum();
+                    let ret_val_offset = 8/* caller BP */ + 8/* return IP */ + args_size;
+                    self.emit(I::GetBp);
+                    self.emit(I::Lit64);
+                    self.emit(ret_val_offset as u64);
+                    self.emit(I::Add64);
+                    match ret_ty {
+                        Type::Void => unreachable!(),
+                        Type::Bool => self.emit(I::Store08),
+                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
+                    }
+                }
+
+                // Drop local variables (and temporal values)
+                self.emit(I::GetBp);
+                self.emit(I::SetSp);
+
                 // Retrieve the return address
                 self.emit(I::GetBp);
                 self.emit(I::Lit64);
                 self.emit(8 as u64);
                 self.emit(I::Add64);
-                // Restore BP
-                self.emit(I::GetBp);
-                self.emit(I::Load64);
-                self.emit(I::SetBp);
+                {
+                    // Restore BP
+                    self.emit(I::GetBp);
+                    self.emit(I::Load64);
+                    self.emit(I::SetBp);
+                }
                 // Jump to the caller
                 self.emit(I::Load64);
                 self.emit(I::Jump);
@@ -546,25 +564,18 @@ impl Compiler {
                 // jump to the function
                 self.emit(I::Jump);
 
+                //------------------------------------------------------------
                 self.emit(Ir::Pointee(cont_addr));
 
-                // save the return value
-                if ret_ty.size_of() > 0 {
-                    let ret_val_size = ret_ty.size_of() as u64;
-                    let args_size: u64 = params_ty.iter().map(|p| p.size_of() as u64).sum();
-                    let ret_val_offset: u64 =
-                        args_size + 8 /* return addr */ + 8 /* old BP */ + ret_val_size;
-                    self.emit(I::GetSp);
-                    self.emit(I::Lit64);
-                    self.emit(ret_val_offset);
-                    self.emit(I::Add64);
-
-                    match ret_ty {
-                        Type::Void => unreachable!(),
-                        Type::Bool => self.emit(I::Store08),
-                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
-                    }
-                }
+                // [ ret val    ]
+                // [ local vars ]
+                // -------------- <-- SP
+                // [ caller BP  ]
+                // [ return IP  ]
+                // [ args       ]
+                // [ ret val    ]
+                // [ ********** ]
+                // -------------- <-- BP
 
                 // drop BP, and return addr
                 self.emit(I::Drop64);
