@@ -1,13 +1,13 @@
 use crate::ty::{Category, Type};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypedExpr {
     pub e: Expr,
     pub t: Option<Type>,
     pub c: Option<Category>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     LiteralVoid,
     LiteralBool(bool),

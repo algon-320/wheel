@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::expr::{Expr, TypedExpr};
-use crate::prog::Program;
+use crate::prog::{Def, Program};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -48,7 +48,17 @@ type TypeEnv = HashMap<String, Type>;
 
 pub fn type_tree(prog: &mut Program) -> Result<(), Error> {
     let mut env = TypeEnv::new();
-    for fun in prog.functions.iter_mut() {
+    for def in prog.defs.iter_mut() {
+        let fun = match def {
+            Def::Data(data) => {
+                type_tree_impl(&mut env, &mut data.initializer)?;
+                assert_type_eq(&data.initializer.t, data.ty.clone())?;
+                env.insert(data.name.clone(), data.ty.clone());
+                continue;
+            }
+            Def::Func(fun) => fun,
+        };
+
         let ty = Type::FuncPtr {
             params: fun.params.iter().map(|p| p.ty.clone()).collect(),
             ret_ty: fun.ret_ty.clone().into(),

@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::expr::{Expr, TypedExpr};
-use crate::prog::{FuncDef, Parameter, Program};
+use crate::prog::{DataDef, Def, FuncDef, Parameter, Program};
 use crate::ty::Type;
 
 #[derive(Debug, Clone)]
@@ -230,16 +230,22 @@ peg::parser! { pub grammar parser() for [Token] {
         = [Ident(name)] [Colon] ty:ty()
         { Parameter { name, ty } }
 
-    rule function_def() -> FuncDef
+    rule function_def() -> Def
         = [Fun] [Ident(name)]
             [LParen] ps:(param() ** [Comma]) [RParen]
             [Arrow] ret_ty:ty() body:block_expr()
-        { FuncDef { name, params: ps, ret_ty, body } }
+        { Def::Func(FuncDef { name, params: ps, ret_ty, body }) }
+
+    // data
+
+    rule static_data() -> Def
+        = [Let] [Ident(name)] [Colon] ty:ty() [Eq] initializer:expr() [SemiColon]
+        { Def::Data(DataDef { name, ty, initializer }) }
 
     // program
 
     pub rule program() -> Program
-        = functions:(function_def())* { Program { functions } }
+        = defs:(function_def() / static_data())* { Program { defs } }
 } }
 
 pub fn parse_program(text: &str) -> Result<Program, Error> {

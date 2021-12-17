@@ -3,7 +3,7 @@ use std::collections::HashMap;
 type Stack<T> = std::vec::Vec<T>;
 
 use crate::expr::{Expr, TypedExpr};
-use crate::prog::Program;
+use crate::prog::{DataDef, Def, FuncDef, Program};
 use crate::ty::{Category, Type};
 use spec::Instruction as I;
 
@@ -73,6 +73,14 @@ impl std::fmt::Debug for BasicBlock {
 enum Addr {
     BpRel(i64),
     Function(PointerId),
+    Data(PointerId),
+}
+
+#[derive(Debug, Clone)]
+struct StaticData {
+    data_location: PointerId,
+    ty: Type,
+    initializer_name: String,
 }
 
 struct LoopContext {
@@ -86,6 +94,7 @@ struct Compiler {
     next_ptr_id: PointerId,
 
     var_addr: HashMap<String, Addr>,
+    static_data: Vec<StaticData>,
     local_vars_size: u64,
     local_vars_size_max: u64,
     loop_context: Stack<LoopContext>,
@@ -99,6 +108,7 @@ impl Compiler {
             next_bb: BlockId(1),
             next_ptr_id: PointerId(1),
             var_addr: HashMap::new(),
+            static_data: Vec::new(),
             local_vars_size: 0,
             local_vars_size_max: 0,
             loop_context: Stack::new(),
@@ -134,116 +144,60 @@ impl Compiler {
     }
 
     fn compile(mut self, prog: Program) -> Vec<u8> {
-        for fun in prog.functions {
-            let (func_bb, func_addr) = self.new_block();
-            self.set_insertion_point(func_bb);
-
-            self.var_addr.insert(fun.name, Addr::Function(func_addr));
-
-            let mut old_vars = Vec::new();
-            let mut offset = 16;
-            for p in fun.params.iter() {
-                let addr = Addr::BpRel(offset);
-                offset += p.ty.size_of() as i64;
-
-                let old = self.var_addr.insert(p.name.clone(), addr);
-                old_vars.push(old);
-            }
-
-            self.local_vars_size = 0;
-            self.local_vars_size_max = 0;
-            self.compile_expr(*fun.body);
-            let local_vars_size = self.local_vars_size_max;
-            debug!("local_vars_size: {}", local_vars_size);
-
-            // make space for local variables
-            // FIXME
-            {
-                let old_bb = self.emit_bb;
-
-                let bb = self.bbs.get_mut(&func_bb).unwrap();
-                let mut old_buf = std::mem::replace(&mut bb.buf, Vec::new());
-
-                bb.buf.push(old_buf[0]); // pointer
-                self.set_insertion_point(func_bb);
-                {
-                    // SP = SP - local_vars_size
-                    self.emit(I::GetSp);
-                    self.emit(I::Lit64);
-                    self.emit(local_vars_size as u64);
-                    self.emit(I::Sub64);
-                    self.emit(I::SetSp);
-
-                    let bb = self.bbs.get_mut(&func_bb).unwrap();
-                    bb.buf.extend(old_buf.drain(1..));
+        for def in prog.defs {
+            match def {
+                Def::Data(data) => {
+                    self.compile_static_data(data);
                 }
-                self.set_insertion_point(old_bb);
-            }
-
-            // Return
-            {
-                //                <-- SP
-                // [ ret val    ]
-                // [ local vars ]
-                // -------------- <-- BP
-                // [ caller BP  ]
-                // [ return IP  ]
-                // [ args       ]
-                // [ ret val    ]
-                // [ ********** ]
-
-                // save the return value
-                let ret_ty = &fun.ret_ty;
-                if ret_ty.size_of() > 0 {
-                    let args_size: u64 = fun.params.iter().map(|p| p.ty.size_of() as u64).sum();
-                    let ret_val_offset = 8/* caller BP */ + 8/* return IP */ + args_size;
-                    self.emit(I::GetBp);
-                    self.emit(I::Lit64);
-                    self.emit(ret_val_offset as u64);
-                    self.emit(I::Add64);
-                    match ret_ty {
-                        Type::Void => unreachable!(),
-                        Type::Bool => self.emit(I::Store08),
-                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
-                    }
-                }
-
-                // Drop local variables (and temporal values)
-                self.emit(I::GetBp);
-                self.emit(I::SetSp);
-
-                // Retrieve the return address
-                self.emit(I::GetBp);
-                self.emit(I::Lit64);
-                self.emit(8 as u64);
-                self.emit(I::Add64);
-                {
-                    // Restore BP
-                    self.emit(I::GetBp);
-                    self.emit(I::Load64);
-                    self.emit(I::SetBp);
-                }
-                // Jump to the caller
-                self.emit(I::Load64);
-                self.emit(I::Jump);
-            }
-
-            for (p, old) in fun.params.iter().zip(old_vars.into_iter()) {
-                if let Some(old) = old {
-                    self.var_addr.insert(p.name.clone(), old);
+                Def::Func(fun) => {
+                    self.compile_function(fun);
                 }
             }
         }
+
+        let static_data = self.static_data.clone();
 
         let (entry_point, _) = self.new_block();
         self.set_insertion_point(entry_point);
         {
             // FIXME
             use Expr::*;
+            for sd in static_data.iter() {
+                // Call initializer
+                self.compile_expr(TypedExpr {
+                    e: Call {
+                        func: TypedExpr {
+                            e: Var(sd.initializer_name.clone()),
+                            t: Some(Type::FuncPtr {
+                                params: vec![],
+                                ret_ty: sd.ty.clone().into(),
+                            }),
+                            c: Some(Category::Regular),
+                        }
+                        .into(),
+                        args: vec![],
+                    },
+                    t: Some(Type::U64),
+                    c: Some(Category::Regular),
+                });
+
+                // Store the returned value at the data location
+                self.emit(I::Lit64);
+                self.emit(Ir::Pointer(sd.data_location));
+                match sd.ty {
+                    Type::Void => todo!("static void"),
+                    Type::Bool => self.emit(I::Store08),
+                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
+                }
+            }
+        }
+        {
+            // FIXME
+            use Expr::*;
             self.compile_expr(TypedExpr {
                 e: Call {
                     func: TypedExpr {
-                        e: Var("main".into()).into(),
+                        e: Var("main".into()),
                         t: Some(Type::FuncPtr {
                             params: vec![],
                             ret_ty: Type::U64.into(),
@@ -257,6 +211,18 @@ impl Compiler {
                 c: Some(Category::Regular),
             });
             self.emit(I::Abort);
+        }
+
+        // Make space for static data
+        let (data_bb, _) = self.new_block();
+        self.set_insertion_point(data_bb);
+        for sd in static_data {
+            self.emit(Ir::Pointee(sd.data_location));
+            let size = sd.ty.size_of();
+            for _ in 0..size {
+                // NOTE: the value 0xBB is meaningless (just for ease of debuging)
+                self.emit(Ir::Data08(0xBB));
+            }
         }
 
         debug!("entry = {:?}", entry_point);
@@ -289,11 +255,15 @@ impl Compiler {
             };
 
             let entry = self.bbs.remove(&entry_point).unwrap();
-            compile_basic_block(entry_point, entry);
+            let data_section = self.bbs.remove(&data_bb).unwrap();
 
+            // Put the entry point bb at the very beginning
+            compile_basic_block(entry_point, entry);
             for (id, bs) in self.bbs {
                 compile_basic_block(id, bs);
             }
+            // Put the data section at the end
+            compile_basic_block(data_bb, data_section);
 
             for (id, pos) in unresolved {
                 let bytes = pointees[&id].to_le_bytes();
@@ -306,6 +276,138 @@ impl Compiler {
             }
         }
         text
+    }
+
+    fn choose_temporal_name(&mut self, prefix: &str) -> String {
+        for i in 0..usize::MAX {
+            let name = format!("{}.{}", prefix, i);
+            if self.var_addr.contains_key(&name) {
+                continue;
+            }
+            return name;
+        }
+        panic!("too many conflicts");
+    }
+
+    fn compile_static_data(&mut self, data: DataDef) {
+        let ty = data.initializer.t.clone().unwrap();
+
+        let initializer_name = self.choose_temporal_name("internal.initializer");
+        self.compile_function(FuncDef {
+            name: initializer_name.clone(),
+            ret_ty: ty.clone(),
+            params: vec![],
+            body: data.initializer.clone(),
+        });
+
+        let data_location = self.new_pointer();
+        self.static_data.push(StaticData {
+            data_location,
+            ty,
+            initializer_name,
+        });
+        self.var_addr.insert(data.name, Addr::Data(data_location));
+    }
+
+    fn compile_function(&mut self, fun: FuncDef) {
+        let (func_bb, func_addr) = self.new_block();
+        self.set_insertion_point(func_bb);
+
+        self.var_addr.insert(fun.name, Addr::Function(func_addr));
+
+        let mut old_vars = Vec::new();
+        let mut offset = 16;
+        for p in fun.params.iter() {
+            let addr = Addr::BpRel(offset);
+            offset += p.ty.size_of() as i64;
+
+            let old = self.var_addr.insert(p.name.clone(), addr);
+            old_vars.push(old);
+        }
+
+        self.local_vars_size = 0;
+        self.local_vars_size_max = 0;
+        self.compile_expr(*fun.body);
+        let local_vars_size = self.local_vars_size_max;
+        debug!("local_vars_size: {}", local_vars_size);
+
+        // make space for local variables
+        // FIXME
+        {
+            let old_bb = self.emit_bb;
+
+            let bb = self.bbs.get_mut(&func_bb).unwrap();
+            let mut old_buf = std::mem::replace(&mut bb.buf, Vec::new());
+
+            bb.buf.push(old_buf[0]); // pointer
+            self.set_insertion_point(func_bb);
+            {
+                // SP = SP - local_vars_size
+                self.emit(I::GetSp);
+                self.emit(I::Lit64);
+                self.emit(local_vars_size as u64);
+                self.emit(I::Sub64);
+                self.emit(I::SetSp);
+
+                let bb = self.bbs.get_mut(&func_bb).unwrap();
+                bb.buf.extend(old_buf.drain(1..));
+            }
+            self.set_insertion_point(old_bb);
+        }
+
+        // Return
+        {
+            //                <-- SP
+            // [ ret val    ]
+            // [ local vars ]
+            // -------------- <-- BP
+            // [ caller BP  ]
+            // [ return IP  ]
+            // [ args       ]
+            // [ ret val    ]
+            // [ ********** ]
+
+            // save the return value
+            let ret_ty = &fun.ret_ty;
+            if ret_ty.size_of() > 0 {
+                let args_size: u64 = fun.params.iter().map(|p| p.ty.size_of() as u64).sum();
+                let ret_val_offset = 8/* caller BP */ + 8/* return IP */ + args_size;
+                self.emit(I::GetBp);
+                self.emit(I::Lit64);
+                self.emit(ret_val_offset as u64);
+                self.emit(I::Add64);
+                match ret_ty {
+                    Type::Void => unreachable!(),
+                    Type::Bool => self.emit(I::Store08),
+                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
+                }
+            }
+
+            // Drop local variables (and temporal values)
+            self.emit(I::GetBp);
+            self.emit(I::SetSp);
+
+            // Retrieve the return address
+            self.emit(I::GetBp);
+            self.emit(I::Lit64);
+            self.emit(8 as u64);
+            self.emit(I::Add64);
+            {
+                // Restore BP
+                self.emit(I::GetBp);
+                self.emit(I::Load64);
+                self.emit(I::SetBp);
+            }
+            // Jump to the caller
+            self.emit(I::Load64);
+            self.emit(I::Jump);
+        }
+
+        for (p, old) in fun.params.iter().zip(old_vars.into_iter()) {
+            if let Some(old) = old {
+                self.var_addr.insert(p.name.clone(), old);
+            }
+        }
     }
 
     fn compile_expr(&mut self, expr: TypedExpr) {
@@ -327,6 +429,20 @@ impl Compiler {
                 if ty.size_of() > 0 {
                     match self.var_addr.get(&name).copied() {
                         Some(addr) => match addr {
+                            Addr::Data(location) => {
+                                self.emit(I::Lit64);
+                                self.emit(Ir::Pointer(location));
+                                if cat == Category::Regular {
+                                    match expr.t.unwrap() {
+                                        Type::Void => unreachable!(),
+                                        Type::Bool => self.emit(I::Load08),
+                                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => {
+                                            self.emit(I::Load64)
+                                        }
+                                    }
+                                }
+                            }
+
                             Addr::BpRel(offset) => {
                                 self.emit(I::GetBp);
                                 self.emit(I::Lit64);

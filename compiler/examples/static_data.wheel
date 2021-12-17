@@ -1,0 +1,24 @@
+fn double(n: u64) -> u64 { n * 2 }
+
+let GLOBAL_COUNTER: u64 = double(50);
+
+fn counter_set(val: u64) -> () {
+    GLOBAL_COUNTER = val;
+}
+fn counter_get() -> u64 {
+    GLOBAL_COUNTER
+}
+fn counter_incr() -> () {
+    counter_set(counter_get() + 1);
+}
+
+fn incr(p: *u64) -> () {
+    *p = *p + 1;
+}
+
+fn main() -> u64 {
+    counter_incr();
+    counter_incr();
+    incr(&GLOBAL_COUNTER);
+    counter_get() // 100+3
+}
