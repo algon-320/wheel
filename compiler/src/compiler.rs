@@ -143,6 +143,43 @@ impl Compiler {
         bb.buf.push(e.into());
     }
 
+    fn generate_function_call_no_arg(&mut self, name: String, ret_ty: Type) {
+        use Expr::*;
+        let func = TypedExpr {
+            e: Var(name),
+            t: Some(Type::FuncPtr {
+                params: vec![],
+                ret_ty: ret_ty.clone().into(),
+            }),
+            c: Some(Category::Regular),
+        };
+        let call = TypedExpr {
+            e: Call {
+                func: func.into(),
+                args: vec![],
+            },
+            t: Some(ret_ty),
+            c: Some(Category::Regular),
+        };
+        self.compile_expr(call);
+    }
+
+    fn generate_store(&mut self, ty: &Type) {
+        match ty {
+            Type::Void => panic!("void store"),
+            Type::Bool => self.emit(I::Store08),
+            Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
+        }
+    }
+
+    fn generate_load(&mut self, ty: &Type) {
+        match ty {
+            Type::Void => panic!("void load"),
+            Type::Bool => self.emit(I::Load08),
+            Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Load64),
+        }
+    }
+
     fn compile(mut self, prog: Program) -> Vec<u8> {
         for def in prog.defs {
             match def {
@@ -158,58 +195,26 @@ impl Compiler {
         let static_data = self.static_data.clone();
 
         let (entry_point, _) = self.new_block();
-        self.set_insertion_point(entry_point);
         {
-            // FIXME
-            use Expr::*;
+            self.set_insertion_point(entry_point);
+
+            // Initialize static data
             for sd in static_data.iter() {
                 // Call initializer
-                self.compile_expr(TypedExpr {
-                    e: Call {
-                        func: TypedExpr {
-                            e: Var(sd.initializer_name.clone()),
-                            t: Some(Type::FuncPtr {
-                                params: vec![],
-                                ret_ty: sd.ty.clone().into(),
-                            }),
-                            c: Some(Category::Regular),
-                        }
-                        .into(),
-                        args: vec![],
-                    },
-                    t: Some(Type::U64),
-                    c: Some(Category::Regular),
-                });
+                let ret_ty = sd.ty.clone();
+                let name = sd.initializer_name.clone();
+                self.generate_function_call_no_arg(name, ret_ty);
 
                 // Store the returned value at the data location
-                self.emit(I::Lit64);
-                self.emit(Ir::Pointer(sd.data_location));
-                match sd.ty {
-                    Type::Void => todo!("static void"),
-                    Type::Bool => self.emit(I::Store08),
-                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
+                if sd.ty.size_of() > 0 {
+                    self.emit(I::Lit64);
+                    self.emit(Ir::Pointer(sd.data_location));
+                    self.generate_store(&sd.ty);
                 }
             }
-        }
-        {
-            // FIXME
-            use Expr::*;
-            self.compile_expr(TypedExpr {
-                e: Call {
-                    func: TypedExpr {
-                        e: Var("main".into()),
-                        t: Some(Type::FuncPtr {
-                            params: vec![],
-                            ret_ty: Type::U64.into(),
-                        }),
-                        c: Some(Category::Regular),
-                    }
-                    .into(),
-                    args: vec![],
-                },
-                t: Some(Type::U64),
-                c: Some(Category::Regular),
-            });
+
+            // Call the main
+            self.generate_function_call_no_arg("main".to_owned(), Type::U64); // FIXME: return type
             self.emit(I::Abort);
         }
 
@@ -376,11 +381,7 @@ impl Compiler {
                 self.emit(I::Lit64);
                 self.emit(ret_val_offset as u64);
                 self.emit(I::Add64);
-                match ret_ty {
-                    Type::Void => unreachable!(),
-                    Type::Bool => self.emit(I::Store08),
-                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
-                }
+                self.generate_store(ret_ty);
             }
 
             // Drop local variables (and temporal values)
@@ -426,55 +427,46 @@ impl Compiler {
             Var(name) => {
                 let ty = expr.t.as_ref().unwrap();
                 let cat = expr.c.unwrap();
-                if ty.size_of() > 0 {
-                    match self.var_addr.get(&name).copied() {
-                        Some(addr) => match addr {
-                            Addr::Data(location) => {
-                                self.emit(I::Lit64);
-                                self.emit(Ir::Pointer(location));
-                                if cat == Category::Regular {
-                                    match expr.t.unwrap() {
-                                        Type::Void => unreachable!(),
-                                        Type::Bool => self.emit(I::Load08),
-                                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => {
-                                            self.emit(I::Load64)
-                                        }
-                                    }
-                                }
-                            }
 
-                            Addr::BpRel(offset) => {
-                                self.emit(I::GetBp);
-                                self.emit(I::Lit64);
-                                self.emit(offset.abs() as u64);
-                                if offset > 0 {
-                                    self.emit(I::Add64); // function argument
-                                } else {
-                                    self.emit(I::Sub64); // local variable
-                                }
+                if ty.size_of() == 0 {
+                    return;
+                }
 
-                                if cat == Category::Regular {
-                                    match expr.t.unwrap() {
-                                        Type::Void => unreachable!(),
-                                        Type::Bool => self.emit(I::Load08),
-                                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => {
-                                            self.emit(I::Load64)
-                                        }
-                                    }
-                                }
+                match self.var_addr.get(&name).copied() {
+                    Some(addr) => match addr {
+                        Addr::Data(location) => {
+                            self.emit(I::Lit64);
+                            self.emit(Ir::Pointer(location));
+                            if cat == Category::Regular {
+                                self.generate_load(expr.t.as_ref().unwrap());
                             }
-                            Addr::Function(p) => {
-                                if cat == Category::Regular {
-                                    self.emit(I::Lit64);
-                                    self.emit(Ir::Pointer(p));
-                                } else {
-                                    todo!("function cannot be a location expression");
-                                }
-                            }
-                        },
-                        None => {
-                            todo!("undefined variable");
                         }
+
+                        Addr::BpRel(offset) => {
+                            self.emit(I::GetBp);
+                            self.emit(I::Lit64);
+                            self.emit(offset.abs() as u64);
+                            if offset > 0 {
+                                self.emit(I::Add64); // function argument
+                            } else {
+                                self.emit(I::Sub64); // local variable
+                            }
+
+                            if cat == Category::Regular {
+                                self.generate_load(expr.t.as_ref().unwrap());
+                            }
+                        }
+                        Addr::Function(p) => {
+                            if cat == Category::Regular {
+                                self.emit(I::Lit64);
+                                self.emit(Ir::Pointer(p));
+                            } else {
+                                todo!("function cannot be a location expression");
+                            }
+                        }
+                    },
+                    None => {
+                        todo!("undefined variable");
                     }
                 }
             }
@@ -486,11 +478,9 @@ impl Compiler {
             PtrDeref(ptr) => {
                 self.compile_expr(*ptr);
                 if expr.c.unwrap() == Category::Regular {
-                    match expr.t.unwrap() {
-                        Type::Void => todo!("deref of *()"),
-                        Type::Bool => self.emit(I::Load08),
-                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Load64),
-                    }
+                    let ty = expr.t.as_ref().unwrap();
+                    assert_ne!(ty, &Type::Void, "deref of *()");
+                    self.generate_load(ty);
                 }
             }
 
@@ -801,11 +791,7 @@ impl Compiler {
                     self.emit(I::Lit64);
                     self.emit(offset);
                     self.emit(I::Sub64);
-                    match var_ty {
-                        Type::Void => unreachable!(),
-                        Type::Bool => self.emit(I::Store08),
-                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
-                    }
+                    self.generate_store(&var_ty);
                 }
 
                 let addr = Addr::BpRel(-(offset as i64));
@@ -824,10 +810,8 @@ impl Compiler {
                 let ty = value.t.clone().unwrap();
                 self.compile_expr(*value);
                 self.compile_expr(*location);
-                match ty {
-                    Type::Void => {}
-                    Type::Bool => self.emit(I::Store08),
-                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
+                if ty.size_of() > 0 {
+                    self.generate_store(&ty);
                 }
             }
 
