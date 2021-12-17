@@ -37,7 +37,7 @@ pub fn disas(bin: &[u8]) -> String {
         let op = I::from(b);
         match op {
             I::Lit08 => {
-                let mut data = (0 as u8).to_le_bytes();
+                let mut data = (0_u8).to_le_bytes();
                 for b in data.iter_mut() {
                     *b = iter.next().unwrap().1;
                 }
@@ -49,7 +49,7 @@ pub fn disas(bin: &[u8]) -> String {
             }
 
             I::Lit16 => {
-                let mut data = (0 as u16).to_le_bytes();
+                let mut data = (0_u16).to_le_bytes();
                 for b in data.iter_mut() {
                     *b = iter.next().unwrap().1;
                 }
@@ -61,7 +61,7 @@ pub fn disas(bin: &[u8]) -> String {
             }
 
             I::Lit32 => {
-                let mut data = (0 as u32).to_le_bytes();
+                let mut data = (0_u32).to_le_bytes();
                 for b in data.iter_mut() {
                     *b = iter.next().unwrap().1;
                 }
@@ -73,7 +73,7 @@ pub fn disas(bin: &[u8]) -> String {
             }
 
             I::Lit64 => {
-                let mut data = (0 as u64).to_le_bytes();
+                let mut data = (0_u64).to_le_bytes();
                 for b in data.iter_mut() {
                     *b = iter.next().unwrap().1;
                 }
