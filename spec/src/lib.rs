@@ -58,9 +58,9 @@ pub enum Instruction {
     Abort = 52,
 }
 
-impl Into<u8> for Instruction {
-    fn into(self) -> u8 {
-        self as u8
+impl From<Instruction> for u8 {
+    fn from(i: Instruction) -> u8 {
+        i as u8
     }
 }
 
