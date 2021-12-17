@@ -26,16 +26,16 @@ macro_rules! impl_from {
         }
     };
 }
-impl_from! {I,  OpCode}
+impl_from! {I,   OpCode}
 impl_from! {u8,  Data08}
 impl_from! {u16, Data16}
 impl_from! {u32, Data32}
 impl_from! {u64, Data64}
 
-impl Into<Vec<u8>> for Ir {
-    fn into(self) -> Vec<u8> {
+impl From<Ir> for Vec<u8> {
+    fn from(ir: Ir) -> Vec<u8> {
         use Ir::*;
-        match self {
+        match ir {
             OpCode(op) => vec![op.into()],
             Data08(x) => vec![x],
             Data16(x) => x.to_le_bytes().to_vec(),
@@ -240,7 +240,7 @@ impl Compiler {
                 for e in bb.buf {
                     match e {
                         Ir::Pointer(ptr_id) => {
-                            let pos = unresolved.entry(ptr_id).or_insert_with(|| Vec::new());
+                            let pos = unresolved.entry(ptr_id).or_insert_with(Vec::new);
                             pos.push(text.len());
                         }
                         Ir::Pointee(ptr_id) => {
@@ -337,7 +337,7 @@ impl Compiler {
             let old_bb = self.emit_bb;
 
             let bb = self.bbs.get_mut(&func_bb).unwrap();
-            let mut old_buf = std::mem::replace(&mut bb.buf, Vec::new());
+            let mut old_buf = std::mem::take(&mut bb.buf);
 
             bb.buf.push(old_buf[0]); // pointer
             self.set_insertion_point(func_bb);
@@ -390,7 +390,7 @@ impl Compiler {
             // Retrieve the return address
             self.emit(I::GetBp);
             self.emit(I::Lit64);
-            self.emit(8 as u64);
+            self.emit(8_u64);
             self.emit(I::Add64);
             {
                 // Restore BP
@@ -535,7 +535,7 @@ impl Compiler {
                     Type::Void => {
                         // Always true
                         self.emit(I::Lit08);
-                        self.emit(1 as u8);
+                        self.emit(1_u8);
                     }
                     Type::Bool => self.emit(I::Eq08),
                     Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Eq64),
@@ -566,7 +566,7 @@ impl Compiler {
                 // top == 0
                 self.compile_expr(*e);
                 self.emit(I::Lit08);
-                self.emit(0 as u8);
+                self.emit(0_u8);
                 self.emit(I::Eq08);
             }
             Neq(lhs, rhs) => {
@@ -577,7 +577,7 @@ impl Compiler {
                     c: Some(Category::Regular),
                 });
                 self.emit(I::Lit08);
-                self.emit(0 as u8);
+                self.emit(0_u8);
                 self.emit(I::Eq08);
             }
             Leq(lhs, rhs) => {
@@ -588,7 +588,7 @@ impl Compiler {
                     c: Some(Category::Regular),
                 });
                 self.emit(I::Lit08);
-                self.emit(0 as u8);
+                self.emit(0_u8);
                 self.emit(I::Eq08);
             }
             Geq(lhs, rhs) => {
@@ -599,7 +599,7 @@ impl Compiler {
                     c: Some(Category::Regular),
                 });
                 self.emit(I::Lit08);
-                self.emit(0 as u8);
+                self.emit(0_u8);
                 self.emit(I::Eq08);
             }
             LAnd(lhs, rhs) => {
@@ -618,7 +618,7 @@ impl Compiler {
                 // lhs + rhs > 0
                 self.emit(I::Add08);
                 self.emit(I::Lit08);
-                self.emit(0 as u8);
+                self.emit(0_u8);
                 self.emit(I::Gt08);
             }
 
@@ -652,11 +652,11 @@ impl Compiler {
                     Type::Void => {}
                     Type::Bool => {
                         self.emit(I::Lit08);
-                        self.emit(0xFF as u8);
+                        self.emit(0xFF_u8);
                     }
                     Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => {
                         self.emit(I::Lit64);
-                        self.emit(0xFFFF_FFFF_FFFF_FFFF as u64);
+                        self.emit(0xFFFF_FFFF_FFFF_FFFF_u64);
                     }
                 }
 
@@ -680,7 +680,7 @@ impl Compiler {
                 // set BP
                 self.emit(I::GetSp);
                 self.emit(I::Lit64);
-                self.emit(8 as u64);
+                self.emit(8_u64);
                 self.emit(I::Add64);
                 self.emit(I::SetBp);
 

@@ -2,7 +2,7 @@ use crate::ty::Type;
 
 #[derive(Debug)]
 pub enum Error {
-    SyntaxError {
+    Syntax {
         line: usize,
         column: usize,
         msg: String,

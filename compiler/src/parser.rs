@@ -1,3 +1,5 @@
+#![allow(clippy::redundant_closure_call)]
+
 use crate::error::Error;
 use crate::expr::{Expr, TypedExpr};
 use crate::prog::{DataDef, Def, FuncDef, Parameter, Program};
@@ -252,8 +254,8 @@ pub fn parse_program(text: &str) -> Result<Program, Error> {
     let pos_tokens: Vec<PosToken> = tokenizer::tokenize(text).map_err(|err| {
         let line = err.location.line;
         let column = err.location.column;
-        let msg = format!("invalid token");
-        Error::SyntaxError { line, column, msg }
+        let msg = "invalid token".to_owned();
+        Error::Syntax { line, column, msg }
     })?;
 
     let (tokens, positions): (Vec<Token>, Vec<(usize, usize)>) = pos_tokens
@@ -267,6 +269,6 @@ pub fn parse_program(text: &str) -> Result<Program, Error> {
         let line = before.as_bytes().iter().filter(|&&c| c == b'\n').count() + 1;
         let column = before.chars().rev().take_while(|&c| c != '\n').count() + 1;
         let msg = format!("unexpected token: {:?}", tokens[err.location]);
-        Error::SyntaxError { line, column, msg }
+        Error::Syntax { line, column, msg }
     })
 }
