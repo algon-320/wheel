@@ -34,6 +34,11 @@ pub fn disas(bin: &[u8]) -> String {
 
     let mut iter = bin.iter().copied().enumerate();
     while let Some((addr, b)) = iter.next() {
+        // FIXME: Ignore static data
+        if b == 0xbb {
+            continue;
+        }
+
         let op = I::from(b);
         match op {
             I::Lit08 => {
