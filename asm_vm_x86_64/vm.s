@@ -280,23 +280,27 @@ push_true:
 
 load08:
   popq  %rax
+  addq  %rdi, %rax
   movb  (%rax), %bl
   decq  %rsp
   movb  %bl, (%rsp)
   jmp   eval
 load16:
   popq  %rax
+  addq  %rdi, %rax
   movw  (%rax), %bx
   pushw %bx
   jmp   eval
 load32:
   popq  %rax
+  addq  %rdi, %rax
   movl  (%rax), %ebx
   subq  $4, %rsp
   movl  %ebx, (%rsp)
   jmp   eval
 load64:
   popq  %rax
+  addq  %rdi, %rax
   movq  (%rax), %rbx
   subq  $8, %rsp
   movq  %rbx, (%rsp)
@@ -304,23 +308,27 @@ load64:
 
 store08:
   popq  %rax
+  addq  %rdi, %rax
   movb  (%rsp), %bl
   incq  %rsp
   movb  %bl, (%rax)
   jmp   eval
 store16:
   popq  %rax
+  addq  %rdi, %rax
   popw  %bx
   movw  %bx, (%rax)
   jmp   eval
 store32:
   popq  %rax
+  addq  %rdi, %rax
   movl  (%rsp), %ebx
   addq  $4, %rsp
   movl  %ebx, (%rax)
   jmp   eval
 store64:
   popq  %rax
+  addq  %rdi, %rax
   popq  %rbx
   movq  %rbx, (%rax)
   jmp   eval
@@ -346,16 +354,22 @@ get_ip:
   jmp   eval
 set_bp:
   popq  %rbp
+  addq  %rdi, %rbp
   jmp   eval
 get_bp:
-  pushq %rbp
+  movq  %rbp, %rax
+  subq  %rdi, %rax
+  pushq %rax
   jmp   eval
 set_sp:
   popq  %rax
+  addq  %rdi, %rax
   movq  %rax, %rsp
   jmp   eval
 get_sp:
-  pushq %rsp
+  movq  %rsp, %rax
+  subq  %rdi, %rax
+  pushq %rax
   jmp   eval
 
 abort:
