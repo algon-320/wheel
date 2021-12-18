@@ -278,12 +278,14 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
             expr.t = in_.t.clone();
         }
 
-        Assignment { location, value } => {
+        Assignment { location, value }
+        | AssignAdd { location, value }
+        | AssignSub { location, value }
+        | AssignMul { location, value }
+        | AssignDiv { location, value } => {
             location.c = Some(Category::Location);
             type_tree_impl(env, location)?;
-
             type_tree_impl(env, value)?;
-
             assert_type_eq(&location.t, value.t.clone().unwrap())?;
             expr.t = Some(Type::Void);
         }

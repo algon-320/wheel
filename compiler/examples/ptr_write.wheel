@@ -1,5 +1,5 @@
 fn ptr_incr(p: *u64) -> () {
-    *p = *p + 1
+    *p += 1;
 }
 
 fn main() -> u64 {

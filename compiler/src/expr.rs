@@ -65,6 +65,22 @@ pub enum Expr {
         location: Box<TypedExpr>,
         value: Box<TypedExpr>,
     },
+    AssignAdd {
+        location: Box<TypedExpr>,
+        value: Box<TypedExpr>,
+    },
+    AssignSub {
+        location: Box<TypedExpr>,
+        value: Box<TypedExpr>,
+    },
+    AssignMul {
+        location: Box<TypedExpr>,
+        value: Box<TypedExpr>,
+    },
+    AssignDiv {
+        location: Box<TypedExpr>,
+        value: Box<TypedExpr>,
+    },
 
     Block(Vec<TypedExpr>, bool),
 }

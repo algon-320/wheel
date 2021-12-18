@@ -10,10 +10,10 @@ fn main() -> u64 {
                 if b == 5 {
                     break; // loop B
                 };
-                cnt = cnt + 1;
-                b = b + 1;
+                cnt += 1;
+                b += 1;
             };
-            a = a + 1;
+            a += 1;
         };
         cnt
     }

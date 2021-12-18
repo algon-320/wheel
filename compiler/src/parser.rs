@@ -153,6 +153,10 @@ peg::parser! { pub grammar parser() for [Token] {
     pub rule expr() -> Box<TypedExpr>
         = precedence! {
             location:(@) [Equal] value:@ { wrap(Expr::Assignment { location, value }) }
+            location:(@) [Plus] [Equal] value:@ { wrap(Expr::AssignAdd { location, value }) }
+            location:(@) [Minus] [Equal] value:@ { wrap(Expr::AssignSub { location, value }) }
+            location:(@) [Star] [Equal] value:@ { wrap(Expr::AssignMul { location, value }) }
+            location:(@) [Slash] [Equal] value:@ { wrap(Expr::AssignDiv { location, value }) }
             --
             l:(@) [Pipe] [Pipe] r:@   { wrap(Expr::LOr(l, r)) }
             l:(@) [And] [And] r:@     { wrap(Expr::LAnd(l, r)) }

@@ -1071,6 +1071,82 @@ impl Compiler {
                     self.generate_store(ty.size_of());
                 }
             }
+            AssignAdd {
+                mut location,
+                value,
+            } => {
+                let ty = value.t.clone().unwrap();
+                self.compile_expr(*value);
+                location.c = Some(Category::Regular);
+                self.compile_expr(*location.clone());
+                match ty {
+                    Type::U64 => self.emit(I::Add64),
+                    _ => todo!(),
+                }
+
+                location.c = Some(Category::Location);
+                self.compile_expr(*location);
+                if ty.size_of() > 0 {
+                    self.generate_store(ty.size_of());
+                }
+            }
+            AssignSub {
+                mut location,
+                value,
+            } => {
+                let ty = value.t.clone().unwrap();
+                self.compile_expr(*value);
+                location.c = Some(Category::Regular);
+                self.compile_expr(*location.clone());
+                match ty {
+                    Type::U64 => self.emit(I::Sub64),
+                    _ => todo!(),
+                }
+
+                location.c = Some(Category::Location);
+                self.compile_expr(*location);
+                if ty.size_of() > 0 {
+                    self.generate_store(ty.size_of());
+                }
+            }
+            AssignMul {
+                mut location,
+                value,
+            } => {
+                let ty = value.t.clone().unwrap();
+                self.compile_expr(*value);
+                location.c = Some(Category::Regular);
+                self.compile_expr(*location.clone());
+                match ty {
+                    Type::U64 => self.emit(I::Mul64),
+                    _ => todo!(),
+                }
+
+                location.c = Some(Category::Location);
+                self.compile_expr(*location);
+                if ty.size_of() > 0 {
+                    self.generate_store(ty.size_of());
+                }
+            }
+            AssignDiv {
+                mut location,
+                value,
+            } => {
+                let ty = value.t.clone().unwrap();
+                self.compile_expr(*value);
+                location.c = Some(Category::Regular);
+                self.compile_expr(*location.clone());
+                match ty {
+                    Type::U64 => self.emit(I::Div64),
+                    _ => todo!(),
+                }
+
+                location.c = Some(Category::Location);
+                self.compile_expr(*location);
+                if ty.size_of() > 0 {
+                    self.generate_store(ty.size_of());
+                }
+            }
 
             Block(exprs, is_void) => {
                 let len = exprs.len();

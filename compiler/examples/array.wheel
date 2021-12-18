@@ -6,7 +6,7 @@ fn memcpy(dst: *u64, src: *u64, len: u64) -> () {
         };
 
         dst[i] = src[i];
-        i = i + 1;
+        i += 1;
     }
 }
 
@@ -22,7 +22,7 @@ fn reverse(p: *u64, len: u64) -> () {
             p[i] = p[len - 1 - i];
             p[len - 1 - i] = tmp;
         };
-        i = i + 1;
+        i += 1;
     }
 }
 
@@ -32,10 +32,9 @@ fn sum(a: *u64, len: u64) -> u64 {
         loop {
             if i == len {
                 break
-            } else {
-                s = s + a[i];
-                i = i + 1;
-            }
+            };
+            s += a[i];
+            i += 1;
         };
         s
     }
