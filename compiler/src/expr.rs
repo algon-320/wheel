@@ -47,7 +47,7 @@ pub enum Expr {
     If {
         cond: Box<TypedExpr>,
         then_expr: Box<TypedExpr>,
-        else_expr: Box<TypedExpr>,
+        else_expr: Option<Box<TypedExpr>>,
     },
 
     Loop {

@@ -9,12 +9,11 @@ fn fib(n: u64) -> u64 {
             loop {
                 if i == n {
                     break
-                } else {
-                    x = y;
-                    y = z;
-                    z = x + y;
-                    i = i + 1;
-                }
+                };
+                x = y;
+                y = z;
+                z = x + y;
+                i = i + 1;
             };
             z
         }

@@ -183,6 +183,7 @@ peg::parser! { pub grammar parser() for [Token] {
             e:block_expr() { e }
             e:variable_def() { e }
             e:if_expr() { e }
+            e:if_no_else_expr() { e }
             e:loop_expr() { e }
             e:break_expr() { e }
 
@@ -231,7 +232,11 @@ peg::parser! { pub grammar parser() for [Token] {
 
     rule if_expr() -> Box<TypedExpr>
         = [If] cond:expr() then_expr:block_expr() [Else] else_expr:block_expr()
-        { wrap(Expr::If { cond, then_expr, else_expr }) }
+        { wrap(Expr::If { cond, then_expr, else_expr: Some(else_expr) }) }
+
+    rule if_no_else_expr() -> Box<TypedExpr>
+        = [If] cond:expr() then_expr:block_expr()
+        { wrap(Expr::If { cond, then_expr, else_expr: None }) }
 
     rule loop_expr() -> Box<TypedExpr>
         = [Loop] body:block_expr()

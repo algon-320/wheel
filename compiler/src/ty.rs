@@ -238,9 +238,15 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
             assert_type_eq(&cond.t, Type::Bool)?;
 
             type_tree_impl(env, then_expr)?;
-            type_tree_impl(env, else_expr)?;
-            assert_type_eq(&then_expr.t, else_expr.t.clone().unwrap())?;
-            expr.t = Some(then_expr.t.clone().unwrap());
+
+            if let Some(else_expr) = else_expr {
+                type_tree_impl(env, else_expr)?;
+                assert_type_eq(&then_expr.t, else_expr.t.clone().unwrap())?;
+                expr.t = Some(then_expr.t.clone().unwrap());
+            } else {
+                assert_type_eq(&then_expr.t, Type::Void)?;
+                expr.t = Some(Type::Void);
+            }
         }
 
         Loop { body } => {

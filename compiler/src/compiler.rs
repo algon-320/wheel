@@ -935,7 +935,7 @@ impl Compiler {
             If {
                 cond,
                 then_expr,
-                else_expr,
+                else_expr: Some(else_expr),
             } => {
                 let old_bb = self.emit_bb;
 
@@ -965,6 +965,31 @@ impl Compiler {
                 self.emit(I::Jump);
 
                 self.set_insertion_point(merge_bb);
+            }
+
+            If {
+                cond,
+                then_expr,
+                else_expr: None,
+            } => {
+                let old_bb = self.emit_bb;
+
+                let merge_addr = self.new_pointer();
+                let (then_bb, then_addr) = self.new_block();
+
+                self.set_insertion_point(then_bb);
+                self.compile_expr(*then_expr);
+                self.emit(I::Lit64);
+                self.emit(Ir::Pointer(merge_addr));
+                self.emit(I::Jump);
+
+                self.set_insertion_point(old_bb);
+                self.emit(I::Lit64);
+                self.emit(Ir::Pointer(then_addr));
+                self.compile_expr(*cond);
+                self.emit(I::JumpIf);
+
+                self.emit(Ir::Pointee(merge_addr));
             }
 
             Loop { body } => {

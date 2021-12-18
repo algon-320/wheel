@@ -2,11 +2,11 @@ fn memcpy(dst: *u64, src: *u64, len: u64) -> () {
     let i = 0 in
     loop {
         if i == len {
-            break
-        } else {
-            dst[i] = src[i];
-            i = i + 1;
-        }
+            break;
+        };
+
+        dst[i] = src[i];
+        i = i + 1;
     }
 }
 
@@ -16,13 +16,13 @@ fn reverse(p: *u64, len: u64) -> () {
     loop {
         if i > m {
             break
-        } else {
-            let tmp = p[i] in {
-                p[i] = p[len - 1 - i];
-                p[len - 1 - i] = tmp;
-            };
-            i = i + 1;
-        }
+        };
+
+        let tmp = p[i] in {
+            p[i] = p[len - 1 - i];
+            p[len - 1 - i] = tmp;
+        };
+        i = i + 1;
     }
 }
 
