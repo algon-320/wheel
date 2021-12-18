@@ -18,6 +18,8 @@ pub enum Token {
     RParen,
     LBrace,
     RBrace,
+    LSquareBracket,
+    RSquareBracket,
     True,
     False,
     Arrow,
@@ -80,6 +82,8 @@ peg::parser! { grammar tokenizer() for str {
         / ")" { Token::RParen }
         / "{" { Token::LBrace }
         / "}" { Token::RBrace }
+        / "[" { Token::LSquareBracket }
+        / "]" { Token::RSquareBracket }
     rule arrow() -> Token = "->" { Token::Arrow }
     rule plus() -> Token = "+" { Token::Plus }
     rule minus() -> Token = "-" { Token::Minus }
@@ -133,7 +137,12 @@ peg::parser! { pub grammar parser() for [Token] {
                 _ => Err("invalid type"),
             }
         }
-        / [Star] ty:data_ty() { Type::Ptr(Box::new(ty)) }
+        / [Star] ty:ty() { Type::Ptr(Box::new(ty)) }
+        / [LSquareBracket] ty:ty() [SemiColon] [Number(len)] [RSquareBracket]
+        {?
+            let len: usize = len.parse().or(Err("integer too large"))?;
+            Ok(Type::Array(Box::new(ty), len))
+        }
 
     rule func_ptr_ty() -> Type
         = [Fun] [LParen] params:(ty() ** [Comma]) [RParen] [Arrow] ret_ty:ty()
@@ -166,6 +175,10 @@ peg::parser! { pub grammar parser() for [Token] {
             --
             [Star] e:@                { wrap(Expr::PtrDeref(e)) }
             [And]  e:@                { wrap(Expr::AddrOf(e)) }
+            --
+            ptr:@ [LSquareBracket] idx:expr() [RSquareBracket]
+                                      { wrap(Expr::ArrayAccess{ ptr, idx }) }
+            --
 
             e:block_expr() { e }
             e:variable_def() { e }
@@ -181,6 +194,7 @@ peg::parser! { pub grammar parser() for [Token] {
             e:literal_bool() { e }
             e:literal_void() { e }
             e:literal_u64() { e }
+            e:literal_array() { e }
             e:variable() { e }
 
             [LParen] expr:expr() [RParen] { expr }
@@ -199,6 +213,13 @@ peg::parser! { pub grammar parser() for [Token] {
         {?
             let n = n.parse().or(Err("u64 literal: integer too large"))?;
             Ok(wrap(Expr::LiteralU64(n)))
+        }
+
+    rule literal_array() -> Box<TypedExpr>
+        = [LSquareBracket] elems:(expr() ++ [Comma]) [RSquareBracket]
+        {
+            let elems = elems.into_iter().map(|bx| *bx).collect();
+            wrap(Expr::LiteralArray(elems))
         }
 
     rule variable() -> Box<TypedExpr>

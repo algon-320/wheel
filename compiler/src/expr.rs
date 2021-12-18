@@ -12,11 +12,16 @@ pub enum Expr {
     LiteralVoid,
     LiteralBool(bool),
     LiteralU64(u64),
+    LiteralArray(Vec<TypedExpr>),
 
     AddrOf(Box<TypedExpr>),
 
     Var(String),
     PtrDeref(Box<TypedExpr>),
+    ArrayAccess {
+        ptr: Box<TypedExpr>,
+        idx: Box<TypedExpr>,
+    },
 
     Add(Box<TypedExpr>, Box<TypedExpr>),
     Sub(Box<TypedExpr>, Box<TypedExpr>),

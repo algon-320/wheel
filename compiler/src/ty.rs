@@ -7,6 +7,7 @@ pub enum Type {
     Void,
     Bool,
     U64,
+    Array(Box<Type>, usize),
     Ptr(Box<Type>),
     FuncPtr {
         params: Vec<Type>,
@@ -15,13 +16,17 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn size_of(&self) -> usize {
+    pub fn size_of(&self) -> u64 {
         match self {
             Type::Void => 0,
             Type::Bool => 1,
             Type::U64 => 8,
+            Type::Array(elem, len) => elem.size_of() * (*len as u64),
             Type::Ptr(_) | Type::FuncPtr { .. } => 8,
         }
+    }
+    pub fn is_array(&self) -> bool {
+        matches!(self, Type::Array(_, _))
     }
 }
 
@@ -53,7 +58,14 @@ pub fn type_tree(prog: &mut Program) -> Result<(), Error> {
             Def::Data(data) => {
                 type_tree_impl(&mut env, &mut data.initializer)?;
                 assert_type_eq(&data.initializer.t, data.ty.clone())?;
-                env.insert(data.name.clone(), data.ty.clone());
+
+                let mut ty = data.ty.clone();
+                // Implicit conversion: [T; _] -> *T
+                if let Type::Array(e, _) = ty {
+                    ty = Type::Ptr(e);
+                }
+
+                env.insert(data.name.clone(), ty);
                 continue;
             }
             Def::Func(fun) => fun,
@@ -67,7 +79,13 @@ pub fn type_tree(prog: &mut Program) -> Result<(), Error> {
 
         let mut old_vars = Vec::new();
         for p in fun.params.iter() {
-            let old = env.insert(p.name.clone(), p.ty.clone());
+            let mut ty = p.ty.clone();
+            // Implicit conversion: [T; _] -> *T
+            if let Type::Array(e, _) = ty {
+                ty = Type::Ptr(e);
+            }
+
+            let old = env.insert(p.name.clone(), ty);
             old_vars.push(old);
         }
 
@@ -97,11 +115,26 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
         LiteralU64(_) => {
             expr.t = Some(Type::U64);
         }
+
+        LiteralArray(elems) => {
+            for e in elems.iter_mut() {
+                type_tree_impl(env, e)?;
+            }
+            let ty = elems[0].t.clone().unwrap();
+            for e in elems.iter_mut() {
+                assert_type_eq(&e.t, ty.clone())?;
+            }
+            expr.t = Some(Type::Array(ty.into(), elems.len()));
+        }
+
         Var(var_name) => {
-            let ty = env.get(var_name).ok_or_else(|| Error::UndefVar {
-                name: var_name.clone(),
-            })?;
-            expr.t = Some(ty.clone());
+            let ty = env
+                .get(var_name)
+                .ok_or_else(|| Error::UndefVar {
+                    name: var_name.clone(),
+                })?
+                .clone();
+            expr.t = Some(ty);
         }
 
         AddrOf(location) => {
@@ -118,6 +151,21 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
                 expr.t = Some(*inner);
             } else {
                 todo!("dereference of non-pointer type: {:?}", ty);
+            }
+        }
+
+        ArrayAccess { ptr, idx } => {
+            type_tree_impl(env, ptr)?;
+            type_tree_impl(env, idx)?;
+            assert_type_eq(&idx.t, Type::U64)?;
+
+            let ty = ptr.t.as_ref().unwrap();
+            if let Type::Array(elem, _) = ty {
+                expr.t = Some(*elem.clone());
+            } else if let Type::Ptr(inner) = ty {
+                expr.t = Some(*inner.clone());
+            } else {
+                todo!("index access for non-array type: {:?}", ty);
             }
         }
 
@@ -211,8 +259,14 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
         } => {
             type_tree_impl(env, value)?;
 
+            let mut ty = value.t.clone().unwrap();
+            // Implicit conversion: [T; _] -> *T
+            if let Type::Array(e, _) = ty {
+                ty = Type::Ptr(e);
+            }
+
             let mut env = env.clone();
-            env.insert(name.clone(), value.t.clone().unwrap());
+            env.insert(name.clone(), ty);
             type_tree_impl(&mut env, in_)?;
 
             expr.t = in_.t.clone();
@@ -243,7 +297,7 @@ fn type_tree_impl(env: &mut TypeEnv, expr: &mut TypedExpr) -> Result<(), Error> 
 
     // verify category
     match expr.e {
-        Var(_) | PtrDeref(_) => {}
+        Var(_) | PtrDeref(_) | ArrayAccess { .. } => {}
         _ => {
             if expr.c == Some(Category::Location) {
                 return Err(Error::CategoryMismatch);

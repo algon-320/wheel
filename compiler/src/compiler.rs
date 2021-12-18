@@ -7,6 +7,26 @@ use crate::prog::{DataDef, Def, FuncDef, Program};
 use crate::ty::{Category, Type};
 use spec::Instruction as I;
 
+fn load_nb(nb: u8) -> I {
+    match nb {
+        8 => I::Load64,
+        4 => I::Load32,
+        2 => I::Load16,
+        1 => I::Load08,
+        _ => unimplemented!(),
+    }
+}
+
+fn store_nb(nb: u8) -> I {
+    match nb {
+        8 => I::Store64,
+        4 => I::Store32,
+        2 => I::Store16,
+        1 => I::Store08,
+        _ => unimplemented!(),
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Ir {
     OpCode(I),
@@ -71,9 +91,11 @@ impl std::fmt::Debug for BasicBlock {
 
 #[derive(Debug, Clone, Copy)]
 enum Addr {
-    BpRel(i64),
     Function(PointerId),
+    BpRel(i64),
     Data(PointerId),
+    ArrayBpRel(i64),
+    ArrayData(PointerId),
 }
 
 #[derive(Debug, Clone)]
@@ -164,19 +186,133 @@ impl Compiler {
         self.compile_expr(call);
     }
 
-    fn generate_store(&mut self, ty: &Type) {
-        match ty {
-            Type::Void => panic!("void store"),
-            Type::Bool => self.emit(I::Store08),
-            Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Store64),
+    fn generate_store(&mut self, size: u64) {
+        match size {
+            0 => panic!("store zero sized value"),
+            1 => self.emit(I::Store08),
+            2 => self.emit(I::Store16),
+            4 => self.emit(I::Store32),
+            8 => self.emit(I::Store64),
+            _ => {
+                let mut r = size;
+                let mut p = 0_u64;
+                while r > 0 {
+                    let n = match r {
+                        8.. => 8,
+                        4.. => 4,
+                        2.. => 2,
+                        1 => 1,
+                        0 => unreachable!(),
+                    };
+
+                    // load [src+p..src+p+n]
+                    self.emit(I::GetSp);
+                    self.emit(I::Lit64);
+                    self.emit(8 + p);
+                    self.emit(I::Add64);
+                    self.emit(load_nb(n as u8));
+
+                    // load dst
+                    self.emit(I::GetSp);
+                    self.emit(I::Lit64);
+                    self.emit(n);
+                    self.emit(I::Add64);
+                    self.emit(I::Load64);
+                    // +p
+                    self.emit(I::Lit64);
+                    self.emit(p);
+                    self.emit(I::Add64);
+
+                    // store
+                    self.emit(store_nb(n as u8));
+
+                    p += n;
+                    r -= n;
+                }
+
+                self.generate_drop(size + 8 /*dst*/);
+            }
         }
     }
 
-    fn generate_load(&mut self, ty: &Type) {
-        match ty {
-            Type::Void => panic!("void load"),
-            Type::Bool => self.emit(I::Load08),
-            Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Load64),
+    fn generate_load(&mut self, size: u64) {
+        match size {
+            0 => panic!("load zero sized value"),
+            1 => self.emit(I::Load08),
+            2 => self.emit(I::Load16),
+            4 => self.emit(I::Load32),
+            8 => self.emit(I::Load64),
+            _ => {
+                if size >= 8 {
+                    self.emit(I::GetSp);
+                    self.emit(I::Lit64);
+                    self.emit(size - 8);
+                    self.emit(I::SetSp);
+                }
+
+                let mut r = size;
+                let mut p = 0_u64;
+                while r > 0 {
+                    let n = match r {
+                        8.. => 8,
+                        4.. => 4,
+                        2.. => 2,
+                        1 => 1,
+                        0 => unreachable!(),
+                    };
+
+                    // load src
+                    self.emit(I::GetSp);
+                    self.emit(I::Lit64);
+                    self.emit(8_u64);
+                    self.emit(I::Add64);
+                    self.emit(I::Load64);
+                    // +p
+                    self.emit(I::Lit64);
+                    self.emit(p);
+                    self.emit(I::Add64);
+
+                    // load value (n-bytes)
+                    self.emit(load_nb(n as u8));
+
+                    // calculate dst
+                    self.emit(I::GetSp);
+                    self.emit(I::Lit64);
+                    self.emit(n + 8 + p);
+                    self.emit(I::Add64);
+
+                    // store value (n-bytes)
+                    self.emit(store_nb(n as u8));
+
+                    p += n;
+                    r -= n;
+                }
+
+                self.emit(I::Drop64); // src
+                if size < 8 {
+                    self.generate_drop(8 - size);
+                }
+            }
+        }
+    }
+
+    fn generate_drop(&mut self, n: u64) {
+        match n {
+            0 => {}
+            1 => self.emit(I::Drop08),
+            2 => self.emit(I::Drop16),
+            4 => self.emit(I::Drop32),
+            8 => self.emit(I::Drop64),
+            // OPTIMIZE: combining multiple DropXX's could be better
+            // e.g. for 16-bytes drop, [Drop64, Drop64]
+            // is better than the direct modification of SP
+            _ => {
+                self.emit(I::GetSp);
+                self.emit(I::Lit64);
+                self.emit(n as u64);
+                self.emit(I::Add64);
+                self.emit(I::SetSp);
+            }
         }
     }
 
@@ -209,7 +345,7 @@ impl Compiler {
                 if sd.ty.size_of() > 0 {
                     self.emit(I::Lit64);
                     self.emit(Ir::Pointer(sd.data_location));
-                    self.generate_store(&sd.ty);
+                    self.generate_store(sd.ty.size_of());
                 }
             }
 
@@ -306,12 +442,17 @@ impl Compiler {
         });
 
         let data_location = self.new_pointer();
+        let addr = if ty.is_array() {
+            Addr::ArrayData(data_location)
+        } else {
+            Addr::Data(data_location)
+        };
         self.static_data.push(StaticData {
             data_location,
             ty,
             initializer_name,
         });
-        self.var_addr.insert(data.name, Addr::Data(data_location));
+        self.var_addr.insert(data.name, addr);
     }
 
     fn compile_function(&mut self, fun: FuncDef) {
@@ -323,11 +464,15 @@ impl Compiler {
         let mut old_vars = Vec::new();
         let mut offset = 16;
         for p in fun.params.iter() {
-            let addr = Addr::BpRel(offset);
-            offset += p.ty.size_of() as i64;
+            let addr = if p.ty.is_array() {
+                Addr::ArrayBpRel(offset)
+            } else {
+                Addr::BpRel(offset)
+            };
 
             let old = self.var_addr.insert(p.name.clone(), addr);
             old_vars.push(old);
+            offset += p.ty.size_of() as i64;
         }
 
         self.local_vars_size = 0;
@@ -375,13 +520,13 @@ impl Compiler {
             // save the return value
             let ret_ty = &fun.ret_ty;
             if ret_ty.size_of() > 0 {
-                let args_size: u64 = fun.params.iter().map(|p| p.ty.size_of() as u64).sum();
+                let args_size: u64 = fun.params.iter().map(|p| p.ty.size_of()).sum();
                 let ret_val_offset = 8/* caller BP */ + 8/* return IP */ + args_size;
                 self.emit(I::GetBp);
                 self.emit(I::Lit64);
                 self.emit(ret_val_offset as u64);
                 self.emit(I::Add64);
-                self.generate_store(ret_ty);
+                self.generate_store(ret_ty.size_of());
             }
 
             // Drop local variables (and temporal values)
@@ -424,6 +569,12 @@ impl Compiler {
                 self.emit(v);
             }
 
+            LiteralArray(elems) => {
+                for e in elems.into_iter().rev() {
+                    self.compile_expr(e);
+                }
+            }
+
             Var(name) => {
                 let ty = expr.t.as_ref().unwrap();
                 let cat = expr.c.unwrap();
@@ -438,7 +589,7 @@ impl Compiler {
                             self.emit(I::Lit64);
                             self.emit(Ir::Pointer(location));
                             if cat == Category::Regular {
-                                self.generate_load(expr.t.as_ref().unwrap());
+                                self.generate_load(ty.size_of());
                             }
                         }
 
@@ -451,11 +602,35 @@ impl Compiler {
                             } else {
                                 self.emit(I::Sub64); // local variable
                             }
-
                             if cat == Category::Regular {
-                                self.generate_load(expr.t.as_ref().unwrap());
+                                self.generate_load(ty.size_of());
                             }
                         }
+
+                        Addr::ArrayData(location) => {
+                            if cat == Category::Regular {
+                                self.emit(I::Lit64);
+                                self.emit(Ir::Pointer(location));
+                            } else {
+                                todo!("array itself cannot be a location expression");
+                            }
+                        }
+
+                        Addr::ArrayBpRel(offset) => {
+                            if cat == Category::Regular {
+                                self.emit(I::GetBp);
+                                self.emit(I::Lit64);
+                                self.emit(offset.abs() as u64);
+                                if offset > 0 {
+                                    self.emit(I::Add64); // function argument
+                                } else {
+                                    self.emit(I::Sub64); // local variable
+                                }
+                            } else {
+                                todo!("array itself cannot be a location expression");
+                            }
+                        }
+
                         Addr::Function(p) => {
                             if cat == Category::Regular {
                                 self.emit(I::Lit64);
@@ -480,7 +655,24 @@ impl Compiler {
                 if expr.c.unwrap() == Category::Regular {
                     let ty = expr.t.as_ref().unwrap();
                     assert_ne!(ty, &Type::Void, "deref of *()");
-                    self.generate_load(ty);
+                    self.generate_load(ty.size_of());
+                }
+            }
+
+            ArrayAccess { ptr, idx } => {
+                let ty = expr.t.as_ref().unwrap();
+                self.compile_expr(*ptr);
+
+                // ptr + idx * sizeof(ty)
+                self.compile_expr(*idx);
+                self.emit(I::Lit64);
+                self.emit(ty.size_of());
+                self.emit(I::Mul64);
+                self.emit(I::Add64);
+
+                if expr.c.unwrap() == Category::Regular {
+                    assert_ne!(ty, &Type::Void, "deref of *()");
+                    self.generate_load(ty.size_of());
                 }
             }
 
@@ -488,7 +680,11 @@ impl Compiler {
                 self.compile_expr(*lhs);
                 self.compile_expr(*rhs);
                 match expr.t.unwrap() {
-                    Type::Void | Type::Bool | Type::Ptr(_) | Type::FuncPtr { .. } => todo!(),
+                    Type::Void
+                    | Type::Bool
+                    | Type::Array(_, _)
+                    | Type::Ptr(_)
+                    | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Add64),
                 }
             }
@@ -496,7 +692,11 @@ impl Compiler {
                 self.compile_expr(*lhs);
                 self.compile_expr(*rhs);
                 match expr.t.unwrap() {
-                    Type::Void | Type::Bool | Type::Ptr(_) | Type::FuncPtr { .. } => todo!(),
+                    Type::Void
+                    | Type::Bool
+                    | Type::Array(_, _)
+                    | Type::Ptr(_)
+                    | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Sub64),
                 }
             }
@@ -504,7 +704,11 @@ impl Compiler {
                 self.compile_expr(*lhs);
                 self.compile_expr(*rhs);
                 match expr.t.unwrap() {
-                    Type::Void | Type::Bool | Type::Ptr(_) | Type::FuncPtr { .. } => todo!(),
+                    Type::Void
+                    | Type::Bool
+                    | Type::Array(_, _)
+                    | Type::Ptr(_)
+                    | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Mul64),
                 }
             }
@@ -512,7 +716,11 @@ impl Compiler {
                 self.compile_expr(*lhs);
                 self.compile_expr(*rhs);
                 match expr.t.unwrap() {
-                    Type::Void | Type::Bool | Type::Ptr(_) | Type::FuncPtr { .. } => todo!(),
+                    Type::Void
+                    | Type::Bool
+                    | Type::Array(_, _)
+                    | Type::Ptr(_)
+                    | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Div64),
                 }
             }
@@ -528,6 +736,7 @@ impl Compiler {
                         self.emit(1_u8);
                     }
                     Type::Bool => self.emit(I::Eq08),
+                    Type::Array(_, _) => todo!("array comparison"),
                     Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Eq64),
                 }
             }
@@ -538,6 +747,7 @@ impl Compiler {
                 match ty {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Lt08),
+                    Type::Array(_, _) => todo!("array comparison"),
                     Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Lt64),
                 }
             }
@@ -548,6 +758,7 @@ impl Compiler {
                 match ty {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Gt08),
+                    Type::Array(_, _) => todo!("array comparison"),
                     Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Gt64),
                 }
             }
@@ -648,6 +859,20 @@ impl Compiler {
                         self.emit(I::Lit64);
                         self.emit(0xFFFF_FFFF_FFFF_FFFF_u64);
                     }
+                    Type::Array(_, _) => {
+                        let size = ret_ty.size_of();
+                        for _ in 0..size {
+                            self.emit(I::Lit08);
+                            self.emit(0xFF_u8);
+                        }
+                        // OPTIMIZE: this is better for larger arrays
+                        // (but it doesn't fill the area with 0xFF)
+                        // self.emit(I::GetSp);
+                        // self.emit(I::Lit64);
+                        // self.emit(size as u64);
+                        // self.emit(I::Sub64);
+                        // self.emit(I::SetSp);
+                    }
                 }
 
                 // push arguments (in reverse order)
@@ -700,6 +925,9 @@ impl Compiler {
                         Type::Void => {}
                         Type::Bool => self.emit(I::Drop08),
                         Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Drop64),
+                        Type::Array(_, _) => {
+                            self.generate_drop(ty.size_of());
+                        }
                     }
                 }
             }
@@ -778,7 +1006,7 @@ impl Compiler {
                 expr: in_,
             } => {
                 let var_ty = value.t.clone().unwrap();
-                let var_size = var_ty.size_of() as u64;
+                let var_size = var_ty.size_of();
                 self.local_vars_size += var_size;
                 self.local_vars_size_max =
                     std::cmp::max(self.local_vars_size_max, self.local_vars_size);
@@ -791,10 +1019,14 @@ impl Compiler {
                     self.emit(I::Lit64);
                     self.emit(offset);
                     self.emit(I::Sub64);
-                    self.generate_store(&var_ty);
+                    self.generate_store(var_ty.size_of());
                 }
 
-                let addr = Addr::BpRel(-(offset as i64));
+                let addr = if var_ty.is_array() {
+                    Addr::ArrayBpRel(-(offset as i64))
+                } else {
+                    Addr::BpRel(-(offset as i64))
+                };
                 let old = self.var_addr.insert(name.clone(), addr);
 
                 self.compile_expr(*in_);
@@ -811,7 +1043,7 @@ impl Compiler {
                 self.compile_expr(*value);
                 self.compile_expr(*location);
                 if ty.size_of() > 0 {
-                    self.generate_store(&ty);
+                    self.generate_store(ty.size_of());
                 }
             }
 
@@ -825,6 +1057,9 @@ impl Compiler {
                             Type::Void => {}
                             Type::Bool => self.emit(I::Drop08),
                             Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Drop64),
+                            Type::Array(_, _) => {
+                                self.generate_drop(ty.size_of());
+                            }
                         }
                     }
                 }
