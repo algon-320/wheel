@@ -3,11 +3,9 @@ fn ptr_incr(p: *u64) -> () {
 }
 
 fn main() -> u64 {
-    let x = 0 in
-    {
-        ptr_incr(&x);
-        ptr_incr(&x);
-        ptr_incr(&x);
-        x
-    }
+    let x = 0;
+    ptr_incr(&x);
+    ptr_incr(&x);
+    ptr_incr(&x);
+    x
 }

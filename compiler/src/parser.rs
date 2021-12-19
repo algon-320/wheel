@@ -234,8 +234,8 @@ peg::parser! { pub grammar parser() for [Token] {
         = [Ident(name)] { wrap(E::Var(name)) }
 
     rule variable_def() -> Box<Expr<Parsed>>
-        = [Let] [Ident(name)] [Equal] e1:expr() [In] e2:expr()
-        { wrap(E::Let { name, value: e1, expr: e2 }) }
+        = [Let] [Ident(name)] [Equal] e1:expr()
+        { wrap(E::Let { name, value: e1 }) }
 
     rule if_expr() -> Box<Expr<Parsed>>
         = [If] cond:expr() then_expr:block_expr() [Else] else_expr:block_expr()

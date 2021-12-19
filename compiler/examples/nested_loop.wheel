@@ -1,20 +1,19 @@
 fn main() -> u64 {
-    let cnt = 0 in
-    let a = 0 in {
-        loop { // loop A
-            if a == 2 {
-                break; // loop A
-            };
-            let b = 0 in
-            loop { // loop B
-                if b == 5 {
-                    break; // loop B
-                };
-                cnt += 1;
-                b += 1;
-            };
-            a += 1;
+    let cnt = 0;
+    let a = 0;
+    loop { // loop A
+        if a == 2 {
+            break; // loop A
         };
-        cnt
-    }
+        let b = 0;
+        loop { // loop B
+            if b == 5 {
+                break; // loop B
+            };
+            cnt += 1;
+            b += 1;
+        };
+        a += 1;
+    };
+    cnt
 }

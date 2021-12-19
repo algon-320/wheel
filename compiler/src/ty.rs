@@ -65,13 +65,46 @@ impl Expr<Typed> {
     }
 }
 
-use std::collections::HashMap;
-type TypeEnv = HashMap<String, Type>;
 type BinCtor = fn(Box<Expr<Typed>>, Box<Expr<Typed>>) -> E<Typed>;
+
+use std::collections::HashMap;
+struct TypeEnv {
+    stack: Vec<HashMap<String, Type>>,
+}
+impl TypeEnv {
+    pub fn new() -> Self {
+        Self { stack: Vec::new() }
+    }
+
+    pub fn create_new_scope(&mut self) {
+        self.stack.push(HashMap::new());
+    }
+    pub fn pop_scope(&mut self) {
+        self.stack.pop();
+    }
+
+    pub fn insert(&mut self, name: String, ty: Type) {
+        let dict = &mut self.stack.last_mut().unwrap();
+        let old = dict.insert(name.clone(), ty);
+        if old.is_some() {
+            log::warn!("variable shadowed: {}", name);
+        }
+    }
+
+    pub fn get(&self, var_name: &str) -> Option<&Type> {
+        for scope in self.stack.iter().rev() {
+            if let Some(val) = scope.get(var_name) {
+                return Some(val);
+            }
+        }
+        None
+    }
+}
 
 pub fn type_program(prog: Program<Parsed>) -> Result<Program<Typed>, Error> {
     let mut typed_prog = Program { defs: Vec::new() };
     let mut env = TypeEnv::new();
+    env.create_new_scope();
     for def in prog.defs {
         let typed_def = match def {
             Def::Data(data) => Def::Data(type_data_def(&mut env, data)?),
@@ -121,7 +154,9 @@ fn type_func_def(env: &mut TypeEnv, func: FuncDef<Parsed>) -> Result<FuncDef<Typ
     };
     env.insert(name.clone(), ty);
 
-    let mut old_vars = Vec::new();
+    //------------------------------------------------------
+    env.create_new_scope();
+
     for p in params.iter() {
         let mut ty = p.ty.clone();
         // Implicit conversion: [T; _] -> *T
@@ -129,20 +164,14 @@ fn type_func_def(env: &mut TypeEnv, func: FuncDef<Parsed>) -> Result<FuncDef<Typ
             ty = Type::Ptr(e);
         }
 
-        let old = env.insert(p.name.clone(), ty);
-        old_vars.push(old);
+        env.insert(p.name.clone(), ty);
     }
 
     let body = type_expr(env, body, Category::Regular)?;
     assert_type_eq(body.ty(), &ret_ty)?;
 
-    for (p, old) in params.iter().zip(old_vars.into_iter()) {
-        if let Some(old) = old {
-            env.insert(p.name.clone(), old);
-        } else {
-            env.remove(&p.name.clone());
-        }
-    }
+    env.pop_scope();
+    //------------------------------------------------------
 
     Ok(FuncDef {
         name,
@@ -355,7 +384,7 @@ fn type_expr(
 
         Break => wrap(Break, Type::Void),
 
-        Let { name, value, expr } => {
+        Let { name, value } => {
             let value = type_expr(env, value, Category::Regular)?;
 
             let mut ty = value.ty().clone();
@@ -363,12 +392,9 @@ fn type_expr(
             if let Type::Array(e, _) = ty {
                 ty = Type::Ptr(e);
             }
-
-            let mut env = env.clone();
             env.insert(name.clone(), ty);
-            let expr = type_expr(&mut env, expr, Category::Regular)?;
-            let ty = expr.ty().clone();
-            wrap(Let { name, value, expr }, ty)
+
+            wrap(Let { name, value }, Type::Void)
         }
 
         Assignment { location, value } => {
@@ -403,6 +429,9 @@ fn type_expr(
         }
 
         Block(exprs) => {
+            //------------------------------------------------------
+            env.create_new_scope();
+
             let mut typed_exprs = Vec::new();
             for e in exprs {
                 let e = type_expr(env, e, Category::Regular)?;
@@ -412,6 +441,10 @@ fn type_expr(
                 .last()
                 .map(|e| e.ty().clone())
                 .unwrap_or(Type::Void);
+
+            env.pop_scope();
+            //------------------------------------------------------
+
             wrap(Block(typed_exprs), ty)
         }
     };

@@ -57,7 +57,6 @@ pub enum E<T: ExprTag> {
     Let {
         name: String,
         value: Box<Expr<T>>,
-        expr: Box<Expr<T>>,
     },
 
     Assignment {

@@ -11,11 +11,9 @@ fn add3(n: u64) -> u64 {
 fn main() -> u64 {
     // f = g; // error
 
-    let fptr = f // implicitly converted to a function pointer
-    in {
-        fptr = g; // it's ok to mutate the pointer
-        fptr();
-    };
+    let fptr = f; // implicitly converted to a function pointer
+    fptr = g; // it's ok to mutate the pointer
+    fptr();
 
     add3(0)
 }

@@ -2,21 +2,22 @@ fn fib(n: u64) -> u64 {
     if n <= 1 {
         n
     } else {
-        let x = 0 in
-        let y = 1 in
-        let z = x + y in
-        let i = 2 in {
-            loop {
-                if i == n {
-                    break
-                };
-                x = y;
-                y = z;
-                z = x + y;
-                i += 1;
+        let x = 0;
+        let y = 1;
+        let z = x + y;
+        let i = 2;
+
+        loop {
+            if i == n {
+                break
             };
-            z
-        }
+            x = y;
+            y = z;
+            z = x + y;
+            i += 1;
+        };
+
+        z
     }
 }
 

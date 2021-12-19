@@ -1,5 +1,5 @@
 fn memcpy(dst: *u64, src: *u64, len: u64) -> () {
-    let i = 0 in
+    let i = 0;
     loop {
         if i == len {
             break;
@@ -11,46 +11,44 @@ fn memcpy(dst: *u64, src: *u64, len: u64) -> () {
 }
 
 fn reverse(p: *u64, len: u64) -> () {
-    let i = 0 in
-    let m = len / 2 in
+    let i = 0;
+    let m = len / 2;
     loop {
         if i > m {
             break
         };
 
-        let tmp = p[i] in {
-            p[i] = p[len - 1 - i];
-            p[len - 1 - i] = tmp;
-        };
+        let tmp = p[i];
+        p[i] = p[len - 1 - i];
+        p[len - 1 - i] = tmp;
+
         i += 1;
     }
 }
 
 fn sum(a: *u64, len: u64) -> u64 {
-    let s = 0 in
-    let i = 0 in {
-        loop {
-            if i == len {
-                break
-            };
-            s += a[i];
-            i += 1;
+    let s = 0;
+    let i = 0;
+    loop {
+        if i == len {
+            break
         };
-        s
-    }
+        s += a[i];
+        i += 1;
+    };
+    s
 }
 
 let ARRAY: [u64; 10] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 fn main() -> u64 {
-    let x = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] in
-    {
-        // x = ARRAY; // error
-        memcpy(x, ARRAY, 10);
+    let x = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
-        reverse(x, 10);
-        reverse(x, 10);
+    // x = ARRAY; // error
+    memcpy(x, ARRAY, 10);
 
-        sum(x, 5) // 1+2+3+4+5
-    }
+    reverse(x, 10);
+    reverse(x, 10);
+
+    sum(x, 5) // 1+2+3+4+5
 }

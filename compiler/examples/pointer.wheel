@@ -3,8 +3,8 @@ fn addr_eq(p: *u64, q: *u64) -> bool {
 }
 
 fn main() -> u64 {
-    let x = 123 in
-    let y = x in
+    let x = 123;
+    let y = x;
     if addr_eq(&x, &x) {
         1
     } else {

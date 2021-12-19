@@ -109,38 +109,53 @@ struct LoopContext {
     end_of_loop: PointerId,
 }
 
-struct Scope(HashMap<String, Addr>, u64);
+struct Scope {
+    dict: HashMap<String, Addr>,
+    size: u64,
+}
 struct Environment {
-    next_id: u64,
-    scope: Stack<Scope>,
+    stack: Stack<Scope>,
+    mem_cur: u64,
+    mem_max: u64,
 }
 impl Environment {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            scope: Stack::new(),
-            next_id: 0,
+            stack: Stack::new(),
+            mem_cur: 0,
+            mem_max: 0,
         }
     }
 
-    fn create_new_scope(&mut self) -> u64 {
-        let id = self.next_id;
-        self.next_id += 1;
-        self.scope.push(Scope(HashMap::new(), id));
-        id
+    pub fn create_new_scope(&mut self) {
+        self.stack.push(Scope {
+            dict: HashMap::new(),
+            size: 0,
+        });
     }
-    fn pop_scope(&mut self) -> Option<u64> {
-        self.scope.pop().map(|Scope(_, id)| id)
-    }
-
-    fn insert(&mut self, name: String, addr: Addr) {
-        let old = self.scope.last_mut().unwrap().0.insert(name.clone(), addr);
-        assert!(old.is_none(), "variable {:?} redefined", name);
+    pub fn pop_scope(&mut self) -> Option<Scope> {
+        let scope = self.stack.pop()?;
+        self.mem_cur -= scope.size;
+        Some(scope)
     }
 
-    fn get(&self, var_name: &str) -> Option<Addr> {
-        for Scope(scope, _) in self.scope.iter().rev() {
-            if let Some(addr) = scope.get(var_name) {
-                return Some(*addr);
+    pub fn insert(&mut self, name: String, addr: Addr, size: Option<u64>) {
+        let scope = &mut self.stack.last_mut().unwrap();
+
+        scope.size += size.unwrap_or(0);
+        self.mem_cur += size.unwrap_or(0);
+        self.mem_max = std::cmp::max(self.mem_max, self.mem_cur);
+
+        let old = scope.dict.insert(name.clone(), addr);
+        if old.is_some() {
+            log::warn!("variable shadowed: {}", name);
+        }
+    }
+
+    pub fn get(&self, var_name: &str) -> Option<Addr> {
+        for scope in self.stack.iter().rev() {
+            if let Some(&addr) = scope.dict.get(var_name) {
+                return Some(addr);
             }
         }
         None
@@ -155,8 +170,6 @@ struct Compiler {
 
     env: Environment,
     static_data: Vec<StaticData>,
-    local_vars_size: u64,
-    local_vars_size_max: u64,
     loop_context: Stack<LoopContext>,
 }
 
@@ -172,8 +185,6 @@ impl Compiler {
             next_ptr_id: PointerId(1),
             env,
             static_data: Vec::new(),
-            local_vars_size: 0,
-            local_vars_size_max: 0,
             loop_context: Stack::new(),
         }
     }
@@ -489,22 +500,24 @@ impl Compiler {
         } else {
             Addr::Data(data_location)
         };
+        self.env.insert(data.name, addr, None);
+
         self.static_data.push(StaticData {
             data_location,
             ty,
             initializer_name,
         });
-        self.env.insert(data.name, addr);
     }
 
     fn compile_function(&mut self, fun: FuncDef<Typed>) {
         let (func_bb, func_addr) = self.new_block();
         self.set_insertion_point(func_bb);
 
-        self.env.insert(fun.name, Addr::Function(func_addr));
+        self.env.insert(fun.name, Addr::Function(func_addr), None);
 
+        //----------------------------------------------------------------------
         // create a scope for parameter
-        let params_scope = self.env.create_new_scope();
+        self.env.create_new_scope();
 
         let mut offset = 16;
         for p in fun.params.iter() {
@@ -514,14 +527,20 @@ impl Compiler {
                 Addr::BpRel(offset)
             };
 
-            self.env.insert(p.name.clone(), addr);
+            self.env.insert(p.name.clone(), addr, None);
             offset += p.ty.size_of() as i64;
         }
 
-        self.local_vars_size = 0;
-        self.local_vars_size_max = 0;
+        self.env.mem_max = 0;
+        self.env.mem_cur = 0;
+
         self.compile_expr(fun.body);
-        let local_vars_size = self.local_vars_size_max;
+
+        let local_vars_size = self.env.mem_max;
+
+        self.env.pop_scope().expect("scope unbalanced");
+        //----------------------------------------------------------------------
+
         debug!("local_vars_size: {}", local_vars_size);
 
         // make space for local variables
@@ -591,9 +610,6 @@ impl Compiler {
             self.emit(I::Load64);
             self.emit(I::Jump);
         }
-
-        let poped_scope = self.env.pop_scope();
-        debug_assert_eq!(poped_scope, Some(params_scope));
     }
 
     fn compile_expr(&mut self, expr: Box<Expr<Typed>>) {
@@ -1074,17 +1090,10 @@ impl Compiler {
                 self.emit(I::Jump);
             }
 
-            Let {
-                name,
-                value,
-                expr: in_,
-            } => {
+            Let { name, value } => {
                 let var_ty = value.ty().clone();
                 let var_size = var_ty.size_of();
-                self.local_vars_size += var_size;
-                self.local_vars_size_max =
-                    std::cmp::max(self.local_vars_size_max, self.local_vars_size);
-                let offset = self.local_vars_size;
+                let offset = self.env.mem_cur + var_size;
 
                 self.compile_expr(value);
 
@@ -1096,21 +1105,12 @@ impl Compiler {
                     self.generate_store(var_ty.size_of());
                 }
 
-                let new_scope = self.env.create_new_scope();
-
                 let addr = if var_ty.is_array() {
                     Addr::ArrayBpRel(-(offset as i64))
                 } else {
                     Addr::BpRel(-(offset as i64))
                 };
-                self.env.insert(name.clone(), addr);
-
-                self.compile_expr(in_);
-
-                let poped_scope = self.env.pop_scope();
-                debug_assert_eq!(poped_scope, Some(new_scope));
-
-                self.local_vars_size -= var_size;
+                self.env.insert(name.clone(), addr, Some(var_size));
             }
 
             Assignment { location, value } => {
@@ -1207,6 +1207,9 @@ impl Compiler {
             }
 
             Block(exprs) => {
+                //--------------------------------------------------------------
+                self.env.create_new_scope();
+
                 let len = exprs.len();
                 for (i, e) in exprs.into_iter().enumerate() {
                     let ty = e.ty().clone();
@@ -1222,6 +1225,9 @@ impl Compiler {
                         }
                     }
                 }
+
+                self.env.pop_scope().expect("scope unbalanced");
+                //--------------------------------------------------------------
             }
         }
     }
