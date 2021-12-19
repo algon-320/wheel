@@ -332,7 +332,7 @@ fn type_expr(
                             func,
                             args: typed_args,
                         };
-                        wrap(call, *ret_ty.clone())
+                        wrap(call, *ret_ty)
                     } else {
                         todo!("type mismatch in function argument")
                     }

@@ -1110,7 +1110,7 @@ impl Compiler {
                 } else {
                     Addr::BpRel(-(offset as i64))
                 };
-                self.env.insert(name.clone(), addr, Some(var_size));
+                self.env.insert(name, addr, Some(var_size));
             }
 
             Assignment { location, value } => {
