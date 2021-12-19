@@ -2,27 +2,27 @@ use log::debug;
 use std::collections::HashMap;
 type Stack<T> = std::vec::Vec<T>;
 
-use crate::expr::{Expr, TypedExpr};
+use crate::expr::{Expr, E};
 use crate::prog::{DataDef, Def, FuncDef, Program};
-use crate::ty::{Category, Type};
+use crate::ty::{Category, Type, Typed};
 use spec::Instruction as I;
 
 fn load_nb(nb: u8) -> I {
     match nb {
-        8 => I::Load64,
-        4 => I::Load32,
-        2 => I::Load16,
         1 => I::Load08,
+        2 => I::Load16,
+        4 => I::Load32,
+        8 => I::Load64,
         _ => unimplemented!(),
     }
 }
 
 fn store_nb(nb: u8) -> I {
     match nb {
-        8 => I::Store64,
-        4 => I::Store32,
-        2 => I::Store16,
         1 => I::Store08,
+        2 => I::Store16,
+        4 => I::Store32,
+        8 => I::Store64,
         _ => unimplemented!(),
     }
 }
@@ -166,24 +166,28 @@ impl Compiler {
     }
 
     fn generate_function_call_no_arg(&mut self, name: String, ret_ty: Type) {
-        use Expr::*;
-        let func = TypedExpr {
+        use E::*;
+        let func = Expr {
             e: Var(name),
-            t: Some(Type::FuncPtr {
-                params: vec![],
-                ret_ty: ret_ty.clone().into(),
-            }),
-            c: Some(Category::Regular),
+            tag: Typed {
+                ty: Type::FuncPtr {
+                    params: vec![],
+                    ret_ty: ret_ty.clone().into(),
+                },
+                cat: Category::Regular,
+            },
         };
-        let call = TypedExpr {
+        let call = Expr {
             e: Call {
                 func: func.into(),
                 args: vec![],
             },
-            t: Some(ret_ty),
-            c: Some(Category::Regular),
+            tag: Typed {
+                ty: ret_ty,
+                cat: Category::Regular,
+            },
         };
-        self.compile_expr(call);
+        self.compile_expr(call.into());
     }
 
     fn generate_store(&mut self, size: u64) {
@@ -316,7 +320,7 @@ impl Compiler {
         }
     }
 
-    fn compile(mut self, prog: Program) -> Vec<u8> {
+    fn compile(mut self, prog: Program<Typed>) -> Vec<u8> {
         for def in prog.defs {
             match def {
                 Def::Data(data) => {
@@ -390,8 +394,7 @@ impl Compiler {
                         }
                         _ => {}
                     }
-                    let bytes: Vec<u8> = e.into();
-                    text.extend(bytes);
+                    text.extend(Vec::<u8>::from(e));
                 }
             };
 
@@ -409,10 +412,8 @@ impl Compiler {
             for (id, pos) in unresolved {
                 let bytes = pointees[&id].to_le_bytes();
                 for p in pos {
-                    for (i, &b) in bytes.iter().enumerate() {
-                        debug_assert_eq!(text[p + i], 0xAA);
-                        text[p + i] = b;
-                    }
+                    debug_assert_eq!(&text[p..p + 8], &0xAAAA_AAAA_AAAA_AAAA_u64.to_le_bytes());
+                    text[p..(p + 8)].copy_from_slice(&bytes);
                 }
             }
         }
@@ -430,8 +431,8 @@ impl Compiler {
         panic!("too many conflicts");
     }
 
-    fn compile_static_data(&mut self, data: DataDef) {
-        let ty = data.initializer.t.clone().unwrap();
+    fn compile_static_data(&mut self, data: DataDef<Typed>) {
+        let ty = data.initializer.ty().clone();
 
         let initializer_name = self.choose_temporal_name("internal.initializer");
         self.compile_function(FuncDef {
@@ -455,7 +456,7 @@ impl Compiler {
         self.var_addr.insert(data.name, addr);
     }
 
-    fn compile_function(&mut self, fun: FuncDef) {
+    fn compile_function(&mut self, fun: FuncDef<Typed>) {
         let (func_bb, func_addr) = self.new_block();
         self.set_insertion_point(func_bb);
 
@@ -477,7 +478,7 @@ impl Compiler {
 
         self.local_vars_size = 0;
         self.local_vars_size_max = 0;
-        self.compile_expr(*fun.body);
+        self.compile_expr(fun.body);
         let local_vars_size = self.local_vars_size_max;
         debug!("local_vars_size: {}", local_vars_size);
 
@@ -556,8 +557,11 @@ impl Compiler {
         }
     }
 
-    fn compile_expr(&mut self, expr: TypedExpr) {
-        use Expr::*;
+    fn compile_expr(&mut self, expr: Box<Expr<Typed>>) {
+        let expr_ty = expr.ty().clone();
+        let expr_cat = expr.cat();
+
+        use E::*;
         match expr.e {
             LiteralVoid => {}
             LiteralBool(b) => {
@@ -576,10 +580,7 @@ impl Compiler {
             }
 
             Var(name) => {
-                let ty = expr.t.as_ref().unwrap();
-                let cat = expr.c.unwrap();
-
-                if ty.size_of() == 0 {
+                if expr_ty.size_of() == 0 {
                     return;
                 }
 
@@ -588,8 +589,8 @@ impl Compiler {
                         Addr::Data(location) => {
                             self.emit(I::Lit64);
                             self.emit(Ir::Pointer(location));
-                            if cat == Category::Regular {
-                                self.generate_load(ty.size_of());
+                            if expr_cat == Category::Regular {
+                                self.generate_load(expr_ty.size_of());
                             }
                         }
 
@@ -602,13 +603,13 @@ impl Compiler {
                             } else {
                                 self.emit(I::Sub64); // local variable
                             }
-                            if cat == Category::Regular {
-                                self.generate_load(ty.size_of());
+                            if expr_cat == Category::Regular {
+                                self.generate_load(expr_ty.size_of());
                             }
                         }
 
                         Addr::ArrayData(location) => {
-                            if cat == Category::Regular {
+                            if expr_cat == Category::Regular {
                                 self.emit(I::Lit64);
                                 self.emit(Ir::Pointer(location));
                             } else {
@@ -617,7 +618,7 @@ impl Compiler {
                         }
 
                         Addr::ArrayBpRel(offset) => {
-                            if cat == Category::Regular {
+                            if expr_cat == Category::Regular {
                                 self.emit(I::GetBp);
                                 self.emit(I::Lit64);
                                 self.emit(offset.abs() as u64);
@@ -632,7 +633,7 @@ impl Compiler {
                         }
 
                         Addr::Function(p) => {
-                            if cat == Category::Regular {
+                            if expr_cat == Category::Regular {
                                 self.emit(I::Lit64);
                                 self.emit(Ir::Pointer(p));
                             } else {
@@ -647,39 +648,37 @@ impl Compiler {
             }
 
             AddrOf(location) => {
-                self.compile_expr(*location);
+                self.compile_expr(location);
             }
 
             PtrDeref(ptr) => {
-                self.compile_expr(*ptr);
-                if expr.c.unwrap() == Category::Regular {
-                    let ty = expr.t.as_ref().unwrap();
-                    assert_ne!(ty, &Type::Void, "deref of *()");
-                    self.generate_load(ty.size_of());
+                self.compile_expr(ptr);
+                if expr_cat == Category::Regular {
+                    assert_ne!(expr_ty, Type::Void, "deref of *()");
+                    self.generate_load(expr_ty.size_of());
                 }
             }
 
             ArrayAccess { ptr, idx } => {
-                let ty = expr.t.as_ref().unwrap();
-                self.compile_expr(*ptr);
+                self.compile_expr(ptr);
 
                 // ptr + idx * sizeof(ty)
-                self.compile_expr(*idx);
+                self.compile_expr(idx);
                 self.emit(I::Lit64);
-                self.emit(ty.size_of());
+                self.emit(expr_ty.size_of());
                 self.emit(I::Mul64);
                 self.emit(I::Add64);
 
-                if expr.c.unwrap() == Category::Regular {
-                    assert_ne!(ty, &Type::Void, "deref of *()");
-                    self.generate_load(ty.size_of());
+                if expr_cat == Category::Regular {
+                    assert_ne!(expr_ty, Type::Void, "deref of *()");
+                    self.generate_load(expr_ty.size_of());
                 }
             }
 
             Add(lhs, rhs) => {
-                self.compile_expr(*lhs);
-                self.compile_expr(*rhs);
-                match expr.t.unwrap() {
+                self.compile_expr(lhs);
+                self.compile_expr(rhs);
+                match expr_ty {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
@@ -689,9 +688,9 @@ impl Compiler {
                 }
             }
             Sub(lhs, rhs) => {
-                self.compile_expr(*lhs);
-                self.compile_expr(*rhs);
-                match expr.t.unwrap() {
+                self.compile_expr(lhs);
+                self.compile_expr(rhs);
+                match expr_ty {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
@@ -701,9 +700,9 @@ impl Compiler {
                 }
             }
             Mul(lhs, rhs) => {
-                self.compile_expr(*lhs);
-                self.compile_expr(*rhs);
-                match expr.t.unwrap() {
+                self.compile_expr(lhs);
+                self.compile_expr(rhs);
+                match expr_ty {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
@@ -713,9 +712,9 @@ impl Compiler {
                 }
             }
             Div(lhs, rhs) => {
-                self.compile_expr(*lhs);
-                self.compile_expr(*rhs);
-                match expr.t.unwrap() {
+                self.compile_expr(lhs);
+                self.compile_expr(rhs);
+                match expr_ty {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
@@ -726,9 +725,9 @@ impl Compiler {
             }
 
             Eq(lhs, rhs) => {
-                let ty = lhs.t.clone().unwrap();
-                self.compile_expr(*lhs);
-                self.compile_expr(*rhs);
+                let ty = lhs.ty().clone();
+                self.compile_expr(lhs);
+                self.compile_expr(rhs);
                 match ty {
                     Type::Void => {
                         // Always true
@@ -741,9 +740,9 @@ impl Compiler {
                 }
             }
             Lt(lhs, rhs) => {
-                let ty = lhs.t.clone().unwrap();
-                self.compile_expr(*lhs);
-                self.compile_expr(*rhs);
+                let ty = lhs.ty().clone();
+                self.compile_expr(lhs);
+                self.compile_expr(rhs);
                 match ty {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Lt08),
@@ -752,9 +751,9 @@ impl Compiler {
                 }
             }
             Gt(lhs, rhs) => {
-                let ty = lhs.t.clone().unwrap();
-                self.compile_expr(*lhs);
-                self.compile_expr(*rhs);
+                let ty = lhs.ty().clone();
+                self.compile_expr(lhs);
+                self.compile_expr(rhs);
                 match ty {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Gt08),
@@ -765,56 +764,67 @@ impl Compiler {
 
             LNot(e) => {
                 // top == 0
-                self.compile_expr(*e);
+                self.compile_expr(e);
                 self.emit(I::Lit08);
                 self.emit(0_u8);
                 self.emit(I::Eq08);
             }
             Neq(lhs, rhs) => {
                 // Eq(lhs, rhs) == 0
-                self.compile_expr(TypedExpr {
-                    e: Eq(lhs, rhs),
-                    t: expr.t,
-                    c: Some(Category::Regular),
-                });
+                self.compile_expr(
+                    Expr {
+                        e: Eq(lhs, rhs),
+                        tag: Typed {
+                            ty: Type::Bool,
+                            cat: Category::Regular,
+                        },
+                    }
+                    .into(),
+                );
                 self.emit(I::Lit08);
                 self.emit(0_u8);
                 self.emit(I::Eq08);
             }
             Leq(lhs, rhs) => {
                 // Gt(lhs, rhs) == 0
-                self.compile_expr(TypedExpr {
-                    e: Gt(lhs, rhs),
-                    t: expr.t,
-                    c: Some(Category::Regular),
-                });
+                self.compile_expr(
+                    Expr {
+                        e: Gt(lhs, rhs),
+                        tag: Typed {
+                            ty: Type::Bool,
+                            cat: Category::Regular,
+                        },
+                    }
+                    .into(),
+                );
                 self.emit(I::Lit08);
                 self.emit(0_u8);
                 self.emit(I::Eq08);
             }
             Geq(lhs, rhs) => {
                 // Lt(lhs, rhs) == 0
-                self.compile_expr(TypedExpr {
-                    e: Lt(lhs, rhs),
-                    t: expr.t,
-                    c: Some(Category::Regular),
-                });
+                self.compile_expr(
+                    Expr {
+                        e: Lt(lhs, rhs),
+                        tag: Typed {
+                            ty: Type::Bool,
+                            cat: Category::Regular,
+                        },
+                    }
+                    .into(),
+                );
                 self.emit(I::Lit08);
                 self.emit(0_u8);
                 self.emit(I::Eq08);
             }
             LAnd(lhs, rhs) => {
-                assert_eq!(lhs.t.as_ref(), Some(&Type::Bool));
-                assert_eq!(rhs.t.as_ref(), Some(&Type::Bool));
-                self.compile_expr(*lhs);
-                self.compile_expr(*rhs);
+                self.compile_expr(lhs);
+                self.compile_expr(rhs);
                 self.emit(I::Mul08);
             }
             LOr(lhs, rhs) => {
-                assert_eq!(lhs.t.as_ref(), Some(&Type::Bool));
-                assert_eq!(rhs.t.as_ref(), Some(&Type::Bool));
-                self.compile_expr(*lhs);
-                self.compile_expr(*rhs);
+                self.compile_expr(lhs);
+                self.compile_expr(rhs);
 
                 // lhs + rhs > 0
                 self.emit(I::Add08);
@@ -842,7 +852,7 @@ impl Compiler {
                 //       v
                 // (higher address)
 
-                let fun_ty = func.t.clone().unwrap();
+                let fun_ty = func.ty().clone();
                 let (params_ty, ret_ty) = match fun_ty {
                     Type::FuncPtr { params, ret_ty } => (params, *ret_ty),
                     _ => unreachable!(),
@@ -890,7 +900,7 @@ impl Compiler {
 
                 // put function address
                 // NOTE: This evaluation must be done before renewing the BP.
-                self.compile_expr(*func);
+                self.compile_expr(func);
 
                 // set BP
                 self.emit(I::GetSp);
@@ -944,13 +954,13 @@ impl Compiler {
                 let (else_bb, else_addr) = self.new_block();
 
                 self.set_insertion_point(then_bb);
-                self.compile_expr(*then_expr);
+                self.compile_expr(then_expr);
                 self.emit(I::Lit64);
                 self.emit(Ir::Pointer(merge_addr));
                 self.emit(I::Jump);
 
                 self.set_insertion_point(else_bb);
-                self.compile_expr(*else_expr);
+                self.compile_expr(else_expr);
                 self.emit(I::Lit64);
                 self.emit(Ir::Pointer(merge_addr));
                 self.emit(I::Jump);
@@ -958,7 +968,7 @@ impl Compiler {
                 self.set_insertion_point(old_bb);
                 self.emit(I::Lit64);
                 self.emit(Ir::Pointer(then_addr));
-                self.compile_expr(*cond);
+                self.compile_expr(cond);
                 self.emit(I::JumpIf);
                 self.emit(I::Lit64);
                 self.emit(Ir::Pointer(else_addr));
@@ -978,7 +988,7 @@ impl Compiler {
                 let (then_bb, then_addr) = self.new_block();
 
                 self.set_insertion_point(then_bb);
-                self.compile_expr(*then_expr);
+                self.compile_expr(then_expr);
                 self.emit(I::Lit64);
                 self.emit(Ir::Pointer(merge_addr));
                 self.emit(I::Jump);
@@ -986,7 +996,7 @@ impl Compiler {
                 self.set_insertion_point(old_bb);
                 self.emit(I::Lit64);
                 self.emit(Ir::Pointer(then_addr));
-                self.compile_expr(*cond);
+                self.compile_expr(cond);
                 self.emit(I::JumpIf);
 
                 self.emit(Ir::Pointee(merge_addr));
@@ -999,7 +1009,7 @@ impl Compiler {
                     let begin = self.new_pointer();
                     self.emit(Ir::Pointee(begin));
 
-                    self.compile_expr(*body);
+                    self.compile_expr(body);
 
                     self.emit(I::Lit64);
                     self.emit(Ir::Pointer(begin));
@@ -1030,14 +1040,14 @@ impl Compiler {
                 value,
                 expr: in_,
             } => {
-                let var_ty = value.t.clone().unwrap();
+                let var_ty = value.ty().clone();
                 let var_size = var_ty.size_of();
                 self.local_vars_size += var_size;
                 self.local_vars_size_max =
                     std::cmp::max(self.local_vars_size_max, self.local_vars_size);
                 let offset = self.local_vars_size;
 
-                self.compile_expr(*value);
+                self.compile_expr(value);
 
                 if var_size > 0 {
                     self.emit(I::GetBp);
@@ -1054,7 +1064,7 @@ impl Compiler {
                 };
                 let old = self.var_addr.insert(name.clone(), addr);
 
-                self.compile_expr(*in_);
+                self.compile_expr(in_);
 
                 if let Some(old) = old {
                     self.var_addr.insert(name, old);
@@ -1064,9 +1074,9 @@ impl Compiler {
             }
 
             Assignment { location, value } => {
-                let ty = value.t.clone().unwrap();
-                self.compile_expr(*value);
-                self.compile_expr(*location);
+                let ty = value.ty().clone();
+                self.compile_expr(value);
+                self.compile_expr(location);
                 if ty.size_of() > 0 {
                     self.generate_store(ty.size_of());
                 }
@@ -1075,17 +1085,19 @@ impl Compiler {
                 mut location,
                 value,
             } => {
-                let ty = value.t.clone().unwrap();
-                self.compile_expr(*value);
-                location.c = Some(Category::Regular);
-                self.compile_expr(*location.clone());
+                assert_eq!(location.cat(), Category::Location);
+                let ty = value.ty().clone();
+
+                self.compile_expr(value);
+                location.tag.cat = Category::Regular;
+                self.compile_expr(location.clone());
                 match ty {
                     Type::U64 => self.emit(I::Add64),
                     _ => todo!(),
                 }
 
-                location.c = Some(Category::Location);
-                self.compile_expr(*location);
+                location.tag.cat = Category::Location;
+                self.compile_expr(location);
                 if ty.size_of() > 0 {
                     self.generate_store(ty.size_of());
                 }
@@ -1094,17 +1106,19 @@ impl Compiler {
                 mut location,
                 value,
             } => {
-                let ty = value.t.clone().unwrap();
-                self.compile_expr(*value);
-                location.c = Some(Category::Regular);
-                self.compile_expr(*location.clone());
+                assert_eq!(location.cat(), Category::Location);
+                let ty = value.ty().clone();
+
+                self.compile_expr(value);
+                location.tag.cat = Category::Regular;
+                self.compile_expr(location.clone());
                 match ty {
                     Type::U64 => self.emit(I::Sub64),
                     _ => todo!(),
                 }
 
-                location.c = Some(Category::Location);
-                self.compile_expr(*location);
+                location.tag.cat = Category::Location;
+                self.compile_expr(location);
                 if ty.size_of() > 0 {
                     self.generate_store(ty.size_of());
                 }
@@ -1113,17 +1127,19 @@ impl Compiler {
                 mut location,
                 value,
             } => {
-                let ty = value.t.clone().unwrap();
-                self.compile_expr(*value);
-                location.c = Some(Category::Regular);
-                self.compile_expr(*location.clone());
+                assert_eq!(location.cat(), Category::Location);
+                let ty = value.ty().clone();
+
+                self.compile_expr(value);
+                location.tag.cat = Category::Regular;
+                self.compile_expr(location.clone());
                 match ty {
                     Type::U64 => self.emit(I::Mul64),
                     _ => todo!(),
                 }
 
-                location.c = Some(Category::Location);
-                self.compile_expr(*location);
+                location.tag.cat = Category::Location;
+                self.compile_expr(location);
                 if ty.size_of() > 0 {
                     self.generate_store(ty.size_of());
                 }
@@ -1132,28 +1148,30 @@ impl Compiler {
                 mut location,
                 value,
             } => {
-                let ty = value.t.clone().unwrap();
-                self.compile_expr(*value);
-                location.c = Some(Category::Regular);
-                self.compile_expr(*location.clone());
+                assert_eq!(location.cat(), Category::Location);
+                let ty = value.ty().clone();
+
+                self.compile_expr(value);
+                location.tag.cat = Category::Regular;
+                self.compile_expr(location.clone());
                 match ty {
                     Type::U64 => self.emit(I::Div64),
                     _ => todo!(),
                 }
 
-                location.c = Some(Category::Location);
-                self.compile_expr(*location);
+                location.tag.cat = Category::Location;
+                self.compile_expr(location);
                 if ty.size_of() > 0 {
                     self.generate_store(ty.size_of());
                 }
             }
 
-            Block(exprs, is_void) => {
+            Block(exprs) => {
                 let len = exprs.len();
                 for (i, e) in exprs.into_iter().enumerate() {
-                    let ty = e.t.clone().unwrap();
+                    let ty = e.ty().clone();
                     self.compile_expr(e);
-                    if is_void || i + 1 < len {
+                    if i + 1 < len {
                         match ty {
                             Type::Void => {}
                             Type::Bool => self.emit(I::Drop08),
@@ -1169,6 +1187,6 @@ impl Compiler {
     }
 }
 
-pub fn compile(prog: Program) -> Vec<u8> {
+pub fn compile(prog: Program<Typed>) -> Vec<u8> {
     Compiler::new().compile(prog)
 }

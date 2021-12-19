@@ -38,7 +38,7 @@ fn main() {
 }
 
 pub fn compile(source: &str) -> Result<Vec<u8>, Error> {
-    let mut program = parser::parse_program(source)?;
-    ty::type_tree(&mut program)?;
+    let program = parser::parse_program(source)?;
+    let program = ty::type_program(program)?;
     Ok(compiler::compile(program))
 }

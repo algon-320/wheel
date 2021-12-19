@@ -1,7 +1,7 @@
 #![allow(clippy::redundant_closure_call)]
 
 use crate::error::Error;
-use crate::expr::{Expr, TypedExpr};
+use crate::expr::{Expr, ExprTag, E};
 use crate::prog::{DataDef, Def, FuncDef, Parameter, Program};
 use crate::ty::Type;
 
@@ -112,12 +112,12 @@ peg::parser! { grammar tokenizer() for str {
         / expected!("number")
 } }
 
-fn wrap(e: Expr) -> Box<TypedExpr> {
-    Box::new(TypedExpr {
-        e,
-        t: None,
-        c: None,
-    })
+#[derive(Debug, Clone, PartialEq)]
+pub struct Parsed;
+impl ExprTag for Parsed {}
+
+fn wrap(e: E<Parsed>) -> Box<Expr<Parsed>> {
+    Box::new(Expr::<Parsed> { e, tag: Parsed })
 }
 
 peg::parser! { pub grammar parser() for [Token] {
@@ -150,38 +150,43 @@ peg::parser! { pub grammar parser() for [Token] {
 
     // expression
 
-    pub rule expr() -> Box<TypedExpr>
+    pub rule expr() -> Box<Expr<Parsed>>
         = precedence! {
-            location:(@) [Equal] value:@ { wrap(Expr::Assignment { location, value }) }
-            location:(@) [Plus] [Equal] value:@ { wrap(Expr::AssignAdd { location, value }) }
-            location:(@) [Minus] [Equal] value:@ { wrap(Expr::AssignSub { location, value }) }
-            location:(@) [Star] [Equal] value:@ { wrap(Expr::AssignMul { location, value }) }
-            location:(@) [Slash] [Equal] value:@ { wrap(Expr::AssignDiv { location, value }) }
+            location:(@) [Equal] value:@
+                { wrap(E::Assignment { location, value }) }
+            location:(@) [Plus] [Equal] value:@
+                { wrap(E::AssignAdd { location, value }) }
+            location:(@) [Minus] [Equal] value:@
+                { wrap(E::AssignSub { location, value }) }
+            location:(@) [Star] [Equal] value:@
+                { wrap(E::AssignMul { location, value }) }
+            location:(@) [Slash] [Equal] value:@
+                { wrap(E::AssignDiv { location, value }) }
             --
-            l:(@) [Pipe] [Pipe] r:@   { wrap(Expr::LOr(l, r)) }
-            l:(@) [And] [And] r:@     { wrap(Expr::LAnd(l, r)) }
+            l:(@) [Pipe] [Pipe] r:@   { wrap(E::LOr(l, r)) }
+            l:(@) [And] [And] r:@     { wrap(E::LAnd(l, r)) }
             --
-            [Bang] e:@                { wrap(Expr::LNot(e)) }
+            [Bang] e:@                { wrap(E::LNot(e)) }
             --
-            l:(@) [Equal] [Equal] r:@ { wrap(Expr::Eq(l, r)) }
-            l:(@) [Bang] [Equal]  r:@ { wrap(Expr::Neq(l, r)) }
+            l:(@) [Equal] [Equal] r:@ { wrap(E::Eq(l, r)) }
+            l:(@) [Bang] [Equal]  r:@ { wrap(E::Neq(l, r)) }
             --
-            l:(@) [Lt] [Equal] r:@    { wrap(Expr::Leq(l, r)) }
-            l:(@) [Gt] [Equal] r:@    { wrap(Expr::Geq(l, r)) }
-            l:(@) [Lt] r:@            { wrap(Expr::Lt(l, r)) }
-            l:(@) [Gt] r:@            { wrap(Expr::Gt(l, r)) }
+            l:(@) [Lt] [Equal] r:@    { wrap(E::Leq(l, r)) }
+            l:(@) [Gt] [Equal] r:@    { wrap(E::Geq(l, r)) }
+            l:(@) [Lt] r:@            { wrap(E::Lt(l, r)) }
+            l:(@) [Gt] r:@            { wrap(E::Gt(l, r)) }
             --
-            l:(@) [Plus]  r:@         { wrap(Expr::Add(l, r)) }
-            l:(@) [Minus] r:@         { wrap(Expr::Sub(l, r)) }
+            l:(@) [Plus]  r:@         { wrap(E::Add(l, r)) }
+            l:(@) [Minus] r:@         { wrap(E::Sub(l, r)) }
             --
-            l:(@) [Star]  r:@         { wrap(Expr::Mul(l, r)) }
-            l:(@) [Slash] r:@         { wrap(Expr::Div(l, r)) }
+            l:(@) [Star]  r:@         { wrap(E::Mul(l, r)) }
+            l:(@) [Slash] r:@         { wrap(E::Div(l, r)) }
             --
-            [Star] e:@                { wrap(Expr::PtrDeref(e)) }
-            [And]  e:@                { wrap(Expr::AddrOf(e)) }
+            [Star] e:@ { wrap(E::PtrDeref(e)) }
+            [And]  e:@ { wrap(E::AddrOf(e)) }
             --
             ptr:@ [LSquareBracket] idx:expr() [RSquareBracket]
-                                      { wrap(Expr::ArrayAccess{ ptr, idx }) }
+                { wrap(E::ArrayAccess{ ptr, idx }) }
             --
 
             e:block_expr() { e }
@@ -192,8 +197,7 @@ peg::parser! { pub grammar parser() for [Token] {
             e:break_expr() { e }
 
             func:@ [LParen] args:(expr() ** [Comma]) [RParen] {
-                let args = args.into_iter().map(|bx| *bx).collect();
-                wrap(Expr::Call { func, args })
+                wrap(E::Call { func, args })
             }
 
             e:literal_bool() { e }
@@ -205,55 +209,57 @@ peg::parser! { pub grammar parser() for [Token] {
             [LParen] expr:expr() [RParen] { expr }
         }
 
-    rule literal_void() -> Box<TypedExpr>
+    rule literal_void() -> Box<Expr<Parsed>>
         = [LParen] [RParen]
-        { wrap(Expr::LiteralVoid) }
+        { wrap(E::LiteralVoid) }
 
-    rule literal_bool() -> Box<TypedExpr>
-        = [True]  { wrap(Expr::LiteralBool(true)) }
-        / [False] { wrap(Expr::LiteralBool(false)) }
+    rule literal_bool() -> Box<Expr<Parsed>>
+        = [True]  { wrap(E::LiteralBool(true)) }
+        / [False] { wrap(E::LiteralBool(false)) }
 
-    rule literal_u64() -> Box<TypedExpr>
+    rule literal_u64() -> Box<Expr<Parsed>>
         = [Number(n)]
         {?
             let n = n.parse().or(Err("u64 literal: integer too large"))?;
-            Ok(wrap(Expr::LiteralU64(n)))
+            Ok(wrap(E::LiteralU64(n)))
         }
 
-    rule literal_array() -> Box<TypedExpr>
+    rule literal_array() -> Box<Expr<Parsed>>
         = [LSquareBracket] elems:(expr() ++ [Comma]) [RSquareBracket]
         {
-            let elems = elems.into_iter().map(|bx| *bx).collect();
-            wrap(Expr::LiteralArray(elems))
+            wrap(E::LiteralArray(elems))
         }
 
-    rule variable() -> Box<TypedExpr>
-        = [Ident(name)] { wrap(Expr::Var(name)) }
+    rule variable() -> Box<Expr<Parsed>>
+        = [Ident(name)] { wrap(E::Var(name)) }
 
-    rule variable_def() -> Box<TypedExpr>
+    rule variable_def() -> Box<Expr<Parsed>>
         = [Let] [Ident(name)] [Equal] e1:expr() [In] e2:expr()
-        { wrap(Expr::Let { name, value: e1, expr: e2 }) }
+        { wrap(E::Let { name, value: e1, expr: e2 }) }
 
-    rule if_expr() -> Box<TypedExpr>
+    rule if_expr() -> Box<Expr<Parsed>>
         = [If] cond:expr() then_expr:block_expr() [Else] else_expr:block_expr()
-        { wrap(Expr::If { cond, then_expr, else_expr: Some(else_expr) }) }
+        { wrap(E::If { cond, then_expr, else_expr: Some(else_expr) }) }
 
-    rule if_no_else_expr() -> Box<TypedExpr>
+    rule if_no_else_expr() -> Box<Expr<Parsed>>
         = [If] cond:expr() then_expr:block_expr()
-        { wrap(Expr::If { cond, then_expr, else_expr: None }) }
+        { wrap(E::If { cond, then_expr, else_expr: None }) }
 
-    rule loop_expr() -> Box<TypedExpr>
+    rule loop_expr() -> Box<Expr<Parsed>>
         = [Loop] body:block_expr()
-        { wrap(Expr::Loop { body }) }
+        { wrap(E::Loop { body }) }
 
-    rule break_expr() -> Box<TypedExpr>
-        = [Break] { wrap(Expr::Break) }
+    rule break_expr() -> Box<Expr<Parsed>>
+        = [Break] { wrap(E::Break) }
 
-    rule block_expr() -> Box<TypedExpr>
+    rule block_expr() -> Box<Expr<Parsed>>
         = [LBrace] exprs:(expr() ** [SemiColon]) is_void:([SemiColon]?) [RBrace]
         {
-            let exprs = exprs.into_iter().map(|bx| *bx).collect();
-            wrap(Expr::Block(exprs, is_void.is_some()))
+            let mut exprs = exprs;
+            if is_void.is_some() {
+                exprs.push(wrap(E::LiteralVoid));
+            }
+            wrap(E::Block(exprs))
         }
 
     // function
@@ -262,7 +268,7 @@ peg::parser! { pub grammar parser() for [Token] {
         = [Ident(name)] [Colon] ty:ty()
         { Parameter { name, ty } }
 
-    rule function_def() -> Def
+    rule function_def() -> Def<Parsed>
         = [Fun] [Ident(name)]
             [LParen] ps:(param() ** [Comma]) [RParen]
             [Arrow] ret_ty:ty() body:block_expr()
@@ -270,17 +276,17 @@ peg::parser! { pub grammar parser() for [Token] {
 
     // data
 
-    rule static_data() -> Def
+    rule static_data() -> Def<Parsed>
         = [Let] [Ident(name)] [Colon] ty:ty() [Eq] initializer:expr() [SemiColon]
         { Def::Data(DataDef { name, ty, initializer }) }
 
     // program
 
-    pub rule program() -> Program
+    pub rule program() -> Program<Parsed>
         = defs:(function_def() / static_data())* { Program { defs } }
 } }
 
-pub fn parse_program(text: &str) -> Result<Program, Error> {
+pub fn parse_program(text: &str) -> Result<Program<Parsed>, Error> {
     let pos_tokens: Vec<PosToken> = tokenizer::tokenize(text).map_err(|err| {
         let line = err.location.line;
         let column = err.location.column;

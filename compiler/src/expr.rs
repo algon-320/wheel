@@ -1,86 +1,85 @@
-use crate::ty::{Category, Type};
+pub trait ExprTag: std::fmt::Debug + Clone + PartialEq {}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TypedExpr {
-    pub e: Expr,
-    pub t: Option<Type>,
-    pub c: Option<Category>,
+pub struct Expr<T: ExprTag> {
+    pub e: E<T>,
+    pub tag: T,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
+pub enum E<T: ExprTag> {
     LiteralVoid,
     LiteralBool(bool),
     LiteralU64(u64),
-    LiteralArray(Vec<TypedExpr>),
+    LiteralArray(Vec<Box<Expr<T>>>),
 
-    AddrOf(Box<TypedExpr>),
+    AddrOf(Box<Expr<T>>),
 
     Var(String),
-    PtrDeref(Box<TypedExpr>),
+    PtrDeref(Box<Expr<T>>),
     ArrayAccess {
-        ptr: Box<TypedExpr>,
-        idx: Box<TypedExpr>,
+        ptr: Box<Expr<T>>,
+        idx: Box<Expr<T>>,
     },
 
-    Add(Box<TypedExpr>, Box<TypedExpr>),
-    Sub(Box<TypedExpr>, Box<TypedExpr>),
-    Mul(Box<TypedExpr>, Box<TypedExpr>),
-    Div(Box<TypedExpr>, Box<TypedExpr>),
+    Add(Box<Expr<T>>, Box<Expr<T>>),
+    Sub(Box<Expr<T>>, Box<Expr<T>>),
+    Mul(Box<Expr<T>>, Box<Expr<T>>),
+    Div(Box<Expr<T>>, Box<Expr<T>>),
 
-    Eq(Box<TypedExpr>, Box<TypedExpr>),
-    Neq(Box<TypedExpr>, Box<TypedExpr>),
-    Lt(Box<TypedExpr>, Box<TypedExpr>),
-    Gt(Box<TypedExpr>, Box<TypedExpr>),
+    Eq(Box<Expr<T>>, Box<Expr<T>>),
+    Neq(Box<Expr<T>>, Box<Expr<T>>),
+    Lt(Box<Expr<T>>, Box<Expr<T>>),
+    Gt(Box<Expr<T>>, Box<Expr<T>>),
 
-    LNot(Box<TypedExpr>),
-    Leq(Box<TypedExpr>, Box<TypedExpr>),
-    Geq(Box<TypedExpr>, Box<TypedExpr>),
-    LAnd(Box<TypedExpr>, Box<TypedExpr>),
-    LOr(Box<TypedExpr>, Box<TypedExpr>),
+    LNot(Box<Expr<T>>),
+    Leq(Box<Expr<T>>, Box<Expr<T>>),
+    Geq(Box<Expr<T>>, Box<Expr<T>>),
+    LAnd(Box<Expr<T>>, Box<Expr<T>>),
+    LOr(Box<Expr<T>>, Box<Expr<T>>),
 
     Call {
-        func: Box<TypedExpr>,
-        args: Vec<TypedExpr>,
+        func: Box<Expr<T>>,
+        args: Vec<Box<Expr<T>>>,
     },
 
     If {
-        cond: Box<TypedExpr>,
-        then_expr: Box<TypedExpr>,
-        else_expr: Option<Box<TypedExpr>>,
+        cond: Box<Expr<T>>,
+        then_expr: Box<Expr<T>>,
+        else_expr: Option<Box<Expr<T>>>,
     },
 
     Loop {
-        body: Box<TypedExpr>,
+        body: Box<Expr<T>>,
     },
     Break,
 
     Let {
         name: String,
-        value: Box<TypedExpr>,
-        expr: Box<TypedExpr>,
+        value: Box<Expr<T>>,
+        expr: Box<Expr<T>>,
     },
 
     Assignment {
-        location: Box<TypedExpr>,
-        value: Box<TypedExpr>,
+        location: Box<Expr<T>>,
+        value: Box<Expr<T>>,
     },
     AssignAdd {
-        location: Box<TypedExpr>,
-        value: Box<TypedExpr>,
+        location: Box<Expr<T>>,
+        value: Box<Expr<T>>,
     },
     AssignSub {
-        location: Box<TypedExpr>,
-        value: Box<TypedExpr>,
+        location: Box<Expr<T>>,
+        value: Box<Expr<T>>,
     },
     AssignMul {
-        location: Box<TypedExpr>,
-        value: Box<TypedExpr>,
+        location: Box<Expr<T>>,
+        value: Box<Expr<T>>,
     },
     AssignDiv {
-        location: Box<TypedExpr>,
-        value: Box<TypedExpr>,
+        location: Box<Expr<T>>,
+        value: Box<Expr<T>>,
     },
 
-    Block(Vec<TypedExpr>, bool),
+    Block(Vec<Box<Expr<T>>>),
 }
