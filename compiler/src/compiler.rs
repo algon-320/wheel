@@ -109,13 +109,51 @@ struct LoopContext {
     end_of_loop: PointerId,
 }
 
+struct Scope(HashMap<String, Addr>, u64);
+struct Environment {
+    next_id: u64,
+    scope: Stack<Scope>,
+}
+impl Environment {
+    fn new() -> Self {
+        Self {
+            scope: Stack::new(),
+            next_id: 0,
+        }
+    }
+
+    fn create_new_scope(&mut self) -> u64 {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.scope.push(Scope(HashMap::new(), id));
+        id
+    }
+    fn pop_scope(&mut self) -> Option<u64> {
+        self.scope.pop().map(|Scope(_, id)| id)
+    }
+
+    fn insert(&mut self, name: String, addr: Addr) {
+        let old = self.scope.last_mut().unwrap().0.insert(name.clone(), addr);
+        assert!(old.is_none(), "variable {:?} redefined", name);
+    }
+
+    fn get(&self, var_name: &str) -> Option<Addr> {
+        for Scope(scope, _) in self.scope.iter().rev() {
+            if let Some(addr) = scope.get(var_name) {
+                return Some(*addr);
+            }
+        }
+        None
+    }
+}
+
 struct Compiler {
     bbs: HashMap<BlockId, BasicBlock>,
     emit_bb: BlockId,
     next_bb: BlockId,
     next_ptr_id: PointerId,
 
-    var_addr: HashMap<String, Addr>,
+    env: Environment,
     static_data: Vec<StaticData>,
     local_vars_size: u64,
     local_vars_size_max: u64,
@@ -124,12 +162,15 @@ struct Compiler {
 
 impl Compiler {
     fn new() -> Self {
+        let mut env = Environment::new();
+        env.create_new_scope();
+
         Self {
             bbs: HashMap::new(),
             emit_bb: BlockId(0),
             next_bb: BlockId(1),
             next_ptr_id: PointerId(1),
-            var_addr: HashMap::new(),
+            env,
             static_data: Vec::new(),
             local_vars_size: 0,
             local_vars_size_max: 0,
@@ -423,7 +464,7 @@ impl Compiler {
     fn choose_temporal_name(&mut self, prefix: &str) -> String {
         for i in 0..usize::MAX {
             let name = format!("{}.{}", prefix, i);
-            if self.var_addr.contains_key(&name) {
+            if self.env.get(&name).is_some() {
                 continue;
             }
             return name;
@@ -453,16 +494,18 @@ impl Compiler {
             ty,
             initializer_name,
         });
-        self.var_addr.insert(data.name, addr);
+        self.env.insert(data.name, addr);
     }
 
     fn compile_function(&mut self, fun: FuncDef<Typed>) {
         let (func_bb, func_addr) = self.new_block();
         self.set_insertion_point(func_bb);
 
-        self.var_addr.insert(fun.name, Addr::Function(func_addr));
+        self.env.insert(fun.name, Addr::Function(func_addr));
 
-        let mut old_vars = Vec::new();
+        // create a scope for parameter
+        let params_scope = self.env.create_new_scope();
+
         let mut offset = 16;
         for p in fun.params.iter() {
             let addr = if p.ty.is_array() {
@@ -471,8 +514,7 @@ impl Compiler {
                 Addr::BpRel(offset)
             };
 
-            let old = self.var_addr.insert(p.name.clone(), addr);
-            old_vars.push(old);
+            self.env.insert(p.name.clone(), addr);
             offset += p.ty.size_of() as i64;
         }
 
@@ -550,11 +592,8 @@ impl Compiler {
             self.emit(I::Jump);
         }
 
-        for (p, old) in fun.params.iter().zip(old_vars.into_iter()) {
-            if let Some(old) = old {
-                self.var_addr.insert(p.name.clone(), old);
-            }
-        }
+        let poped_scope = self.env.pop_scope();
+        debug_assert_eq!(poped_scope, Some(params_scope));
     }
 
     fn compile_expr(&mut self, expr: Box<Expr<Typed>>) {
@@ -584,7 +623,7 @@ impl Compiler {
                     return;
                 }
 
-                match self.var_addr.get(&name).copied() {
+                match self.env.get(&name) {
                     Some(addr) => match addr {
                         Addr::Data(location) => {
                             self.emit(I::Lit64);
@@ -1057,18 +1096,19 @@ impl Compiler {
                     self.generate_store(var_ty.size_of());
                 }
 
+                let new_scope = self.env.create_new_scope();
+
                 let addr = if var_ty.is_array() {
                     Addr::ArrayBpRel(-(offset as i64))
                 } else {
                     Addr::BpRel(-(offset as i64))
                 };
-                let old = self.var_addr.insert(name.clone(), addr);
+                self.env.insert(name.clone(), addr);
 
                 self.compile_expr(in_);
 
-                if let Some(old) = old {
-                    self.var_addr.insert(name, old);
-                }
+                let poped_scope = self.env.pop_scope();
+                debug_assert_eq!(poped_scope, Some(new_scope));
 
                 self.local_vars_size -= var_size;
             }
