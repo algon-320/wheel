@@ -612,6 +612,7 @@ impl Compiler {
         }
     }
 
+    #[allow(clippy::boxed_local)]
     fn compile_expr(&mut self, expr: Box<Expr<Typed>>) {
         let expr_ty = expr.ty().clone();
         let expr_cat = expr.cat();

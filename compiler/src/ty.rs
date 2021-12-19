@@ -181,6 +181,7 @@ fn type_func_def(env: &mut TypeEnv, func: FuncDef<Parsed>) -> Result<FuncDef<Typ
     })
 }
 
+#[allow(clippy::boxed_local)]
 fn type_expr(
     env: &mut TypeEnv,
     expr: Box<Expr<Parsed>>,
