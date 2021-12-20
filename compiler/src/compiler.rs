@@ -365,7 +365,7 @@ impl Compiler {
             _ => {
                 self.emit(I::GetSp);
                 self.emit(I::Lit64);
-                self.emit(n as u64);
+                self.emit(n);
                 self.emit(I::Add64);
                 self.emit(I::SetSp);
             }
@@ -557,7 +557,7 @@ impl Compiler {
                 // SP = SP - local_vars_size
                 self.emit(I::GetSp);
                 self.emit(I::Lit64);
-                self.emit(local_vars_size as u64);
+                self.emit(local_vars_size);
                 self.emit(I::Sub64);
                 self.emit(I::SetSp);
 
@@ -586,7 +586,7 @@ impl Compiler {
                 let ret_val_offset = 8/* caller BP */ + 8/* return IP */ + args_size;
                 self.emit(I::GetBp);
                 self.emit(I::Lit64);
-                self.emit(ret_val_offset as u64);
+                self.emit(ret_val_offset);
                 self.emit(I::Add64);
                 self.generate_store(ret_ty.size_of());
             }
