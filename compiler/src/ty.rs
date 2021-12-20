@@ -384,6 +384,7 @@ fn type_expr(
         }
 
         Break => wrap(Break, Type::Void),
+        Continue => wrap(Continue, Type::Void),
 
         Let { name, value } => {
             let value = type_expr(env, value, Category::Regular)?;

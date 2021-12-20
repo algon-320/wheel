@@ -53,6 +53,7 @@ pub enum E<T: ExprTag> {
         body: Box<Expr<T>>,
     },
     Break,
+    Continue,
 
     Let {
         name: String,

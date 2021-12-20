@@ -12,6 +12,7 @@ pub enum Token {
     Else,
     Loop,
     Break,
+    Continue,
     Let,
     In,
     LParen,
@@ -59,8 +60,8 @@ peg::parser! { grammar tokenizer() for str {
     rule token() -> PosToken
         = (ws() / comment())*
           begin:position!() tok:(
-            fun() / if_() / else_() / loop_() / break_() / let_() / in_() /
-            boolean() / paren() / arrow() /
+            fun() / if_() / else_() / loop_() / break_() / continue_() /
+            let_() / in_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
             colon() / semicolon() / comma() / equal() / lt() / gt() /
             and() / pipe() / bang() / ident() / number()
@@ -73,6 +74,7 @@ peg::parser! { grammar tokenizer() for str {
     rule else_() -> Token = "else" !alnum_() { Token::Else }
     rule loop_() -> Token = "loop" !alnum_() { Token::Loop }
     rule break_() -> Token = "break" !alnum_() { Token::Break }
+    rule continue_() -> Token = "continue" !alnum_() { Token::Continue }
     rule let_() -> Token = "let" !alnum_() { Token::Let }
     rule in_() -> Token = "in" !alnum_() { Token::In }
     rule boolean() -> Token
@@ -195,6 +197,7 @@ peg::parser! { pub grammar parser() for [Token] {
             e:if_no_else_expr() { e }
             e:loop_expr() { e }
             e:break_expr() { e }
+            e:continue_expr() { e }
 
             func:@ [LParen] args:(expr() ** [Comma]) [RParen] {
                 wrap(E::Call { func, args })
@@ -251,6 +254,9 @@ peg::parser! { pub grammar parser() for [Token] {
 
     rule break_expr() -> Box<Expr<Parsed>>
         = [Break] { wrap(E::Break) }
+
+    rule continue_expr() -> Box<Expr<Parsed>>
+        = [Continue] { wrap(E::Continue) }
 
     rule block_expr() -> Box<Expr<Parsed>>
         = [LBrace] [RBrace] { wrap(E::Block(vec![])) }

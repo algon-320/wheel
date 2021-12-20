@@ -106,6 +106,7 @@ struct StaticData {
 }
 
 struct LoopContext {
+    begin_of_loop: PointerId,
     end_of_loop: PointerId,
 }
 
@@ -1059,10 +1060,13 @@ impl Compiler {
             }
 
             Loop { body } => {
+                let begin = self.new_pointer();
                 let cont = self.new_pointer();
-                self.loop_context.push(LoopContext { end_of_loop: cont });
+                self.loop_context.push(LoopContext {
+                    begin_of_loop: begin,
+                    end_of_loop: cont,
+                });
                 {
-                    let begin = self.new_pointer();
                     self.emit(Ir::Pointee(begin));
 
                     self.compile_expr(body);
@@ -1088,6 +1092,16 @@ impl Compiler {
                 };
                 self.emit(I::Lit64);
                 self.emit(Ir::Pointer(cont));
+                self.emit(I::Jump);
+            }
+            Continue => {
+                // FIXME: Drop temporal values when getting back to the begining.
+                let begin = match self.loop_context.last() {
+                    None => todo!("`continue` only allowed inside a loop"),
+                    Some(lc) => lc.begin_of_loop,
+                };
+                self.emit(I::Lit64);
+                self.emit(Ir::Pointer(begin));
                 self.emit(I::Jump);
             }
 
