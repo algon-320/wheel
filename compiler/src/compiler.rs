@@ -61,7 +61,7 @@ impl From<Ir> for Vec<u8> {
             Data16(x) => x.to_le_bytes().to_vec(),
             Data32(x) => x.to_le_bytes().to_vec(),
             Data64(x) => x.to_le_bytes().to_vec(),
-            Pointer(_) => 0xAAAAAAAAAAAAAAAAu64.to_le_bytes().to_vec(),
+            Pointer(_) => vec![0xAA_u8; 8],
             Pointee(_) => vec![],
         }
     }
@@ -464,7 +464,7 @@ impl Compiler {
             for (id, pos) in unresolved {
                 let bytes = pointees[&id].to_le_bytes();
                 for p in pos {
-                    debug_assert_eq!(&text[p..p + 8], &0xAAAA_AAAA_AAAA_AAAA_u64.to_le_bytes());
+                    debug_assert_eq!(&text[p..p + 8], &[0xAA_u8; 8]);
                     text[p..(p + 8)].copy_from_slice(&bytes);
                 }
             }
