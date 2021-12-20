@@ -1,15 +1,20 @@
-fn f() -> bool { false }
-fn f_() -> bool {{ false }}
-fn f__() -> bool {{{ false}}}
+fn void1() -> () { }
+fn void2() -> () { () }
+fn void3() -> () { (); }
+fn void4() -> () { {1} {} }
+fn void5() -> () { {1} {}; }
+fn void6() -> () { {1}; }
+fn void7() -> () { 1; }
+fn void8() -> () { 1; 2; }
 
-fn g() -> () { 1; 2; 3; }
+fn value1() -> u64 { 1 }
+fn value2() -> u64 { {1} }
+fn value3() -> u64 { {{1}} }
+fn value4() -> u64 { 1 + 1 }
+fn value5() -> u64 { 1 + {1} }
+fn value6() -> u64 { ({1}) + 1 }
+fn value7() -> u64 { ({1}) + ({1}) }
+fn value8() -> u64 { 1; 2; 3 }
+fn value9() -> u64 { {} {} 3 }
 
-fn h() -> u64 { 123 }
-
-fn main() -> u64 {
-    f();
-    f_();
-    f__();
-    g();
-    h()
-}
+fn main() -> u64 { 123 }

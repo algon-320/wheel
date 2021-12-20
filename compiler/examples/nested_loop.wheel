@@ -4,16 +4,16 @@ fn main() -> u64 {
     loop { // loop A
         if a == 2 {
             break; // loop A
-        };
+        }
         let b = 0;
         loop { // loop B
             if b == 5 {
                 break; // loop B
-            };
+            }
             cnt += 1;
             b += 1;
-        };
+        }
         a += 1;
-    };
+    }
     cnt
 }

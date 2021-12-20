@@ -253,14 +253,35 @@ peg::parser! { pub grammar parser() for [Token] {
         = [Break] { wrap(E::Break) }
 
     rule block_expr() -> Box<Expr<Parsed>>
-        = [LBrace] exprs:(expr() ** [SemiColon]) is_void:([SemiColon]?) [RBrace]
+        = [LBrace] [RBrace] { wrap(E::Block(vec![])) }
+        / [LBrace] exprs:(block_element()+) [RBrace]
         {
-            let mut exprs = exprs;
-            if is_void.is_some() {
+            let is_void = exprs.last().expect("+").1;
+            let mut exprs: Vec<_> = exprs.into_iter().map(|(e, _)| e).collect();
+            if is_void {
                 exprs.push(wrap(E::LiteralVoid));
             }
             wrap(E::Block(exprs))
         }
+        / [LBrace] exprs:(block_element()*) last: expr_without_block() [RBrace]
+        {
+            let mut exprs: Vec<_> = exprs.into_iter().map(|(e, _)| e).collect();
+            exprs.push(last);
+            wrap(E::Block(exprs))
+        }
+
+    rule block_element() -> (Box<Expr<Parsed>>, bool)
+        = e:expr_without_block() [SemiColon] { (e, true) }
+        / e:expr_with_block() semi:([SemiColon]?) { (e, semi.is_some()) }
+
+    rule expr_with_block() -> Box<Expr<Parsed>>
+        = block_expr()
+        / if_expr()
+        / if_no_else_expr()
+        / loop_expr()
+
+    rule expr_without_block() -> Box<Expr<Parsed>>
+        = !expr_with_block() e:expr() { e }
 
     // function
 
