@@ -1115,6 +1115,61 @@ impl Compiler {
                 self.emit(Ir::Pointee(cont));
             }
 
+            For {
+                init,
+                cond,
+                update,
+                body,
+            } => {
+                //--------------------------------------------------------------
+                self.env.create_new_scope();
+
+                self.compile_expr(init);
+
+                let begin = self.new_pointer();
+                let check = self.new_pointer();
+                let cont = self.new_pointer();
+                self.loop_context.push(LoopContext {
+                    begin_of_loop: begin,
+                    end_of_loop: cont,
+                });
+
+                // skip the first evaluation of `update`
+                self.emit(I::Lit64);
+                self.emit(Ir::Pointer(check));
+                self.emit(I::Jump);
+
+                {
+                    self.emit(Ir::Pointee(begin));
+                    self.compile_expr(update);
+
+                    self.emit(Ir::Pointee(check));
+                    {
+                        self.emit(I::Lit64);
+                        self.emit(Ir::Pointer(cont));
+
+                        self.compile_expr(cond);
+                        self.emit(I::Lit08);
+                        self.emit(0_u8);
+                        self.emit(I::Eq08);
+
+                        self.emit(I::JumpIf);
+                    }
+
+                    self.compile_expr(body);
+
+                    self.emit(I::Lit64);
+                    self.emit(Ir::Pointer(begin));
+                    self.emit(I::Jump);
+                }
+
+                self.loop_context.pop();
+                self.emit(Ir::Pointee(cont));
+
+                self.env.pop_scope().expect("scope unbalanced");
+                //--------------------------------------------------------------
+            }
+
             Break => {
                 // FIXME: Drop temporal values when getting out of a loop
                 // Current implementation possibly lets temporal values remain

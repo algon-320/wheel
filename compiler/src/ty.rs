@@ -380,13 +380,47 @@ fn type_expr(
 
         Loop { body } => {
             let body = type_expr(env, body, Category::Regular)?;
+            assert_type_eq(body.ty(), &Type::Void)?;
             wrap(Loop { body }, Type::Void)
         }
         While { cond, body } => {
             let cond = type_expr(env, cond, Category::Regular)?;
-            assert_type_eq(cond.ty(), &Type::Bool)?;
             let body = type_expr(env, body, Category::Regular)?;
+            assert_type_eq(cond.ty(), &Type::Bool)?;
+            assert_type_eq(body.ty(), &Type::Void)?;
             wrap(While { cond, body }, Type::Void)
+        }
+        For {
+            init,
+            cond,
+            update,
+            body,
+        } => {
+            //------------------------------------------------------
+            env.create_new_scope();
+
+            let init = type_expr(env, init, Category::Regular)?;
+            let cond = type_expr(env, cond, Category::Regular)?;
+            let update = type_expr(env, update, Category::Regular)?;
+            let body = type_expr(env, body, Category::Regular)?;
+
+            env.pop_scope();
+            //------------------------------------------------------
+
+            assert_type_eq(init.ty(), &Type::Void)?;
+            assert_type_eq(cond.ty(), &Type::Bool)?;
+            assert_type_eq(update.ty(), &Type::Void)?;
+            assert_type_eq(body.ty(), &Type::Void)?;
+
+            wrap(
+                For {
+                    init,
+                    cond,
+                    update,
+                    body,
+                },
+                Type::Void,
+            )
         }
 
         Break => wrap(Break, Type::Void),

@@ -56,6 +56,12 @@ pub enum E<T: ExprTag> {
         cond: Box<Expr<T>>,
         body: Box<Expr<T>>,
     },
+    For {
+        init: Box<Expr<T>>,
+        cond: Box<Expr<T>>,
+        update: Box<Expr<T>>,
+        body: Box<Expr<T>>,
+    },
     Break,
     Continue,
 

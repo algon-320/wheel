@@ -12,6 +12,7 @@ pub enum Token {
     Else,
     Loop,
     While,
+    For,
     Break,
     Continue,
     Let,
@@ -61,7 +62,7 @@ peg::parser! { grammar tokenizer() for str {
     rule token() -> PosToken
         = (ws() / comment())*
           begin:position!() tok:(
-            fun() / if_() / else_() / loop_() / while_() /
+            fun() / if_() / else_() / loop_() / while_() / for_() /
             break_() / continue_() /
             let_() / in_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
@@ -76,6 +77,7 @@ peg::parser! { grammar tokenizer() for str {
     rule else_() -> Token = "else" !alnum_() { Token::Else }
     rule loop_() -> Token = "loop" !alnum_() { Token::Loop }
     rule while_() -> Token = "while" !alnum_() { Token::While }
+    rule for_() -> Token = "for" !alnum_() { Token::For }
     rule break_() -> Token = "break" !alnum_() { Token::Break }
     rule continue_() -> Token = "continue" !alnum_() { Token::Continue }
     rule let_() -> Token = "let" !alnum_() { Token::Let }
@@ -200,6 +202,7 @@ peg::parser! { pub grammar parser() for [Token] {
             e:if_no_else_expr() { e }
             e:loop_expr() { e }
             e:while_expr() { e }
+            e:for_expr() { e }
             e:break_expr() { e }
             e:continue_expr() { e }
 
@@ -260,6 +263,10 @@ peg::parser! { pub grammar parser() for [Token] {
         = [While] cond:expr() body:block_expr()
         { wrap(E::While { cond, body }) }
 
+    rule for_expr() -> Box<Expr<Parsed>>
+        = [For] init:expr() [SemiColon] cond:expr() [SemiColon] update:expr() body:block_expr()
+        { wrap(E::For { init, cond, update, body }) }
+
     rule break_expr() -> Box<Expr<Parsed>>
         = [Break] { wrap(E::Break) }
 
@@ -294,6 +301,7 @@ peg::parser! { pub grammar parser() for [Token] {
         / if_no_else_expr()
         / loop_expr()
         / while_expr()
+        / for_expr()
 
     rule expr_without_block() -> Box<Expr<Parsed>>
         = !expr_with_block() e:expr() { e }
