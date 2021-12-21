@@ -1,7 +1,6 @@
+use crate::ast::{DataDef, Def, Expr, ExprTag, FuncDef, Program, E};
 use crate::error::Error;
-use crate::expr::{Expr, ExprTag, E};
 use crate::parser::Parsed;
-use crate::prog::{DataDef, Def, FuncDef, Program};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {

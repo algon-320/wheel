@@ -1,8 +1,7 @@
+mod ast;
 mod compiler;
 mod error;
-mod expr;
 mod parser;
-mod prog;
 mod ty;
 
 use crate::error::Error;

@@ -2,8 +2,7 @@ use log::debug;
 use std::collections::HashMap;
 type Stack<T> = std::vec::Vec<T>;
 
-use crate::expr::{Expr, E};
-use crate::prog::{DataDef, Def, FuncDef, Program};
+use crate::ast::{DataDef, Def, Expr, FuncDef, Program, E};
 use crate::ty::{Category, Type, Typed};
 use spec::Instruction as I;
 

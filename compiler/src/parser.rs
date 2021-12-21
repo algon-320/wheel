@@ -1,8 +1,7 @@
 #![allow(clippy::redundant_closure_call)]
 
+use crate::ast::{DataDef, Def, Expr, ExprTag, FuncDef, Parameter, Program, E};
 use crate::error::Error;
-use crate::expr::{Expr, ExprTag, E};
-use crate::prog::{DataDef, Def, FuncDef, Parameter, Program};
 use crate::ty::Type;
 
 #[derive(Debug, Clone)]
