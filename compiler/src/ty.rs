@@ -382,6 +382,12 @@ fn type_expr(
             let body = type_expr(env, body, Category::Regular)?;
             wrap(Loop { body }, Type::Void)
         }
+        While { cond, body } => {
+            let cond = type_expr(env, cond, Category::Regular)?;
+            assert_type_eq(cond.ty(), &Type::Bool)?;
+            let body = type_expr(env, body, Category::Regular)?;
+            wrap(While { cond, body }, Type::Void)
+        }
 
         Break => wrap(Break, Type::Void),
         Continue => wrap(Continue, Type::Void),

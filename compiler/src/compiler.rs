@@ -1079,6 +1079,42 @@ impl Compiler {
                 self.emit(Ir::Pointee(cont));
             }
 
+            While { cond, body } => {
+                let begin = self.new_pointer();
+                let cont = self.new_pointer();
+                self.loop_context.push(LoopContext {
+                    begin_of_loop: begin,
+                    end_of_loop: cont,
+                });
+
+                {
+                    self.emit(Ir::Pointee(begin));
+
+                    // jump to cont if cond is not met
+                    {
+                        self.emit(I::Lit64);
+                        self.emit(Ir::Pointer(cont));
+
+                        // negate
+                        self.compile_expr(cond);
+                        self.emit(I::Lit08);
+                        self.emit(0_u8);
+                        self.emit(I::Eq08);
+
+                        self.emit(I::JumpIf);
+                    }
+
+                    self.compile_expr(body);
+
+                    self.emit(I::Lit64);
+                    self.emit(Ir::Pointer(begin));
+                    self.emit(I::Jump);
+                }
+
+                self.loop_context.pop();
+                self.emit(Ir::Pointee(cont));
+            }
+
             Break => {
                 // FIXME: Drop temporal values when getting out of a loop
                 // Current implementation possibly lets temporal values remain

@@ -52,6 +52,10 @@ pub enum E<T: ExprTag> {
     Loop {
         body: Box<Expr<T>>,
     },
+    While {
+        cond: Box<Expr<T>>,
+        body: Box<Expr<T>>,
+    },
     Break,
     Continue,
 
