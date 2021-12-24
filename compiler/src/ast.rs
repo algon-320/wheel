@@ -11,6 +11,7 @@ pub struct Program<E: ExprBound, T: TypeBound> {
 pub enum Def<E: ExprBound, T: TypeBound> {
     Func(FuncDef<E, T>),
     Data(DataDef<E, T>),
+    Struct(StructDef<T>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,11 +36,21 @@ pub struct DataDef<E: ExprBound, T: TypeBound> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct StructDef<T: TypeBound> {
+    pub name: String,
+    pub fields: Vec<Field<T>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr<E: ExprBound> {
     LiteralVoid,
     LiteralBool(bool),
     LiteralU64(u64),
     LiteralArray(Vec<Box<E>>),
+    LiteralStruct {
+        name: String,
+        fields: Vec<(String, Box<E>)>,
+    },
 
     AddrOf(Box<E>),
 

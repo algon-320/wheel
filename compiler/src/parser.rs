@@ -1,12 +1,13 @@
 #![allow(clippy::redundant_closure_call)]
 
-use crate::ast::{DataDef, Def, Expr, ExprBound, Field, FuncDef, Program};
+use crate::ast::{DataDef, Def, Expr, ExprBound, Field, FuncDef, Program, StructDef};
 use crate::error::Error;
 use crate::ty::{Type, TypeBound};
 
 #[derive(Debug, Clone)]
 pub enum Token {
     Fun,
+    Struct,
     If,
     Else,
     Loop,
@@ -61,7 +62,7 @@ peg::parser! { grammar tokenizer() for str {
     rule token() -> PosToken
         = (ws() / comment())*
           begin:position!() tok:(
-            fun() / if_() / else_() / loop_() / while_() / for_() /
+            fun() / struct_() / if_() / else_() / loop_() / while_() / for_() /
             break_() / continue_() /
             let_() / in_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
@@ -72,6 +73,7 @@ peg::parser! { grammar tokenizer() for str {
           { PosToken { t: tok, begin, end } }
 
     rule fun() -> Token = "fn" !alnum_() { Token::Fun }
+    rule struct_() -> Token = "struct" !alnum_() { Token::Struct }
     rule if_() -> Token = "if" !alnum_() { Token::If }
     rule else_() -> Token = "else" !alnum_() { Token::Else }
     rule loop_() -> Token = "loop" !alnum_() { Token::Loop }
@@ -212,6 +214,7 @@ peg::parser! { pub grammar parser() for [Token] {
             --
 
             e:block_expr() { e }
+            e:literal_struct() { e }
             e:variable_def() { e }
             e:if_expr() { e }
             e:if_no_else_expr() { e }
@@ -254,6 +257,13 @@ peg::parser! { pub grammar parser() for [Token] {
         {
             wrap(Expr::LiteralArray(elems))
         }
+
+    rule literal_struct() -> Box<ParsedExpr>
+        = [Ident(name)] [LBrace] fields:(struct_field() ** [Comma]) [Comma]? [RBrace]
+        { wrap(Expr::LiteralStruct { name, fields }) }
+
+    rule struct_field() -> (String, Box<ParsedExpr>)
+        = [Ident(name)] [Colon] val:expr() { (name, val) }
 
     rule variable() -> Box<ParsedExpr>
         = [Ident(name)] { wrap(Expr::Var(name)) }
@@ -335,8 +345,12 @@ peg::parser! { pub grammar parser() for [Token] {
         = [Let] [Ident(name)] [Colon] ty:ty() [Eq] initializer:expr() [SemiColon]
         { Def::Data(DataDef { name, ty: *ty, initializer }) }
 
+    rule struct_def() -> Def<ParsedExpr, ParsedType>
+        = [Struct] [Ident(name)] [LBrace] fields:(field() ** [Comma]) [Comma]? [RBrace]
+        { Def::Struct(StructDef { name, fields }) }
+
     pub rule program() -> Program<ParsedExpr, ParsedType>
-        = defs:(function_def() / static_data())* { Program { defs } }
+        = defs:(function_def() / static_data() / struct_def())* { Program { defs } }
 } }
 
 pub fn parse_program(text: &str) -> Result<Program<ParsedExpr, ParsedType>, Error> {

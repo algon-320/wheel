@@ -1,4 +1,4 @@
-use crate::ast::{DataDef, Def, Expr, ExprBound, Field, FuncDef, Program};
+use crate::ast::{DataDef, Def, Expr, ExprBound, Field, FuncDef, Program, StructDef};
 use crate::error::Error;
 use crate::parser::{ParsedExpr, ParsedType};
 
@@ -12,6 +12,7 @@ pub enum Type<T: TypeBound> {
     Array(Box<T>, usize),
     Ptr(Box<T>),
     FuncPtr { params: Vec<T>, ret_ty: Box<T> },
+    Struct { name: String, fields: Vec<T> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,6 +26,7 @@ impl ResolvedType {
             Type::Bool => 1,
             Type::U64 => 8,
             Type::Array(elem, len) => elem.size_of() * (*len as u64),
+            Type::Struct { fields, .. } => fields.iter().fold(0_u64, |a, f| a + f.size_of()),
             Type::Ptr(_) | Type::FuncPtr { .. } => 8,
         }
     }
@@ -140,6 +142,14 @@ impl TypeChecker {
                         let ret_ty = self.resolve(*ret_ty)?.into();
                         ResolvedType(Type::FuncPtr { params, ret_ty })
                     }
+
+                    Type::Struct { name, fields } => {
+                        let fields = fields
+                            .into_iter()
+                            .map(|field| self.resolve(field))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        ResolvedType(Type::Struct { name, fields })
+                    }
                 };
                 Ok(ty)
             }
@@ -164,6 +174,31 @@ impl TypeChecker {
             let typed_def = match def {
                 Def::Data(data) => Def::Data(self.type_data_def(data)?),
                 Def::Func(func) => Def::Func(self.type_func_def(func)?),
+                Def::Struct(struct_def) => {
+                    let mut types = Vec::new();
+                    let mut typed_fields = Vec::new();
+                    for f in struct_def.fields {
+                        let ty = self.resolve(f.ty)?;
+                        if ty.size_of() == 0 {
+                            todo!("ZST at struct field is not yet supported.");
+                        } else {
+                            types.push(ty.clone());
+                            let name = f.name.clone();
+                            typed_fields.push(Field { name, ty });
+                        }
+                    }
+
+                    let ty = Type::Struct {
+                        name: struct_def.name.clone(),
+                        fields: types,
+                    };
+                    self.type_map.insert(struct_def.name.clone(), ty.into());
+
+                    Def::Struct(StructDef {
+                        name: struct_def.name,
+                        fields: typed_fields,
+                    })
+                }
             };
             typed_prog.defs.push(typed_def);
         }
@@ -287,6 +322,44 @@ impl TypeChecker {
 
                 let ty = Type::Array(elem_ty.into(), typed_elems.len());
                 wrap(LiteralArray(typed_elems), ty.into())
+            }
+
+            LiteralStruct { name, fields } => {
+                let mut types = Vec::new();
+                let mut typed_fields = Vec::new();
+                for (name, value) in fields {
+                    let value = self.type_expr(value, Category::Regular)?;
+                    types.push(value.ty.clone());
+                    typed_fields.push((name, value));
+                }
+
+                match self.type_map.get(&name) {
+                    Some(ty) => {
+                        if let Type::Struct {
+                            name: name_def,
+                            fields: fields_def,
+                        } = &ty.0
+                        {
+                            assert_eq!(&name, name_def);
+                            assert_eq!(&types, fields_def);
+                        } else {
+                            todo!("expect struct");
+                        }
+                    }
+                    None => {
+                        return Err(Error::UndefinedType { name: name.clone() });
+                    }
+                }
+
+                let e = LiteralStruct {
+                    name: name.clone(),
+                    fields: typed_fields,
+                };
+                let ty = Type::Struct {
+                    name,
+                    fields: types,
+                };
+                wrap(e, ty.into())
             }
 
             Var(var_name) => match self.env.get(&var_name) {

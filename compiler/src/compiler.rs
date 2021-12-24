@@ -1,8 +1,8 @@
 use log::debug;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 type Stack<T> = std::vec::Vec<T>;
 
-use crate::ast::{DataDef, Def, Expr, FuncDef, Program};
+use crate::ast::{DataDef, Def, Expr, Field, FuncDef, Program};
 use crate::error::Error;
 use crate::ty::{Category, ResolvedType, Type, TypedExpr};
 use spec::Instruction as I;
@@ -163,6 +163,8 @@ impl Environment {
     }
 }
 
+type StructLayout = HashMap<String, u64>;
+
 struct Compiler {
     bbs: HashMap<BlockId, BasicBlock>,
     emit_bb: BlockId,
@@ -170,6 +172,7 @@ struct Compiler {
     next_ptr_id: PointerId,
 
     env: Environment,
+    struct_layout: HashMap<String, StructLayout>,
     static_data: Vec<StaticData>,
     loop_context: Stack<LoopContext>,
 }
@@ -185,6 +188,7 @@ impl Compiler {
             next_bb: BlockId(1),
             next_ptr_id: PointerId(1),
             env,
+            struct_layout: HashMap::new(),
             static_data: Vec::new(),
             loop_context: Stack::new(),
         }
@@ -378,6 +382,16 @@ impl Compiler {
     fn compile(mut self, prog: Program<TypedExpr, ResolvedType>) -> Result<Vec<u8>, Error> {
         for def in prog.defs {
             match def {
+                Def::Struct(def) => {
+                    let mut layout = StructLayout::new();
+                    let mut offset = 0;
+                    for Field { name, ty } in def.fields {
+                        layout.insert(name, offset);
+                        offset += ty.size_of();
+                    }
+                    debug!("struct {} (size={}): {:?}", def.name, offset, layout);
+                    self.struct_layout.insert(def.name, layout);
+                }
                 Def::Data(data) => {
                     self.compile_static_data(data)?;
                 }
@@ -642,6 +656,35 @@ impl Compiler {
                 }
             }
 
+            LiteralStruct {
+                name: struct_name,
+                fields,
+            } => {
+                let layout = match self.struct_layout.get(&struct_name) {
+                    Some(l) => l,
+                    None => {
+                        return Err(Error::UndefinedType { name: struct_name });
+                    }
+                };
+
+                let mut value_offset = BTreeMap::new();
+                for (name, value) in fields {
+                    if let Some(offset) = layout.get(&name).copied() {
+                        value_offset.insert(offset, value);
+                    } else {
+                        return Err(Error::UndefinedField {
+                            struct_name,
+                            field_name: name,
+                        });
+                    }
+                }
+
+                // push each field in reverse order
+                for (_, value) in value_offset.into_iter().rev() {
+                    self.compile_expr(value)?;
+                }
+            }
+
             Var(_) if expr_ty.size_of() == 0 => {}
             Var(name) => {
                 match self.env.get(&name) {
@@ -742,6 +785,7 @@ impl Compiler {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
+                    | Type::Struct { .. }
                     | Type::Ptr(_)
                     | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Add64),
@@ -754,6 +798,7 @@ impl Compiler {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
+                    | Type::Struct { .. }
                     | Type::Ptr(_)
                     | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Sub64),
@@ -766,6 +811,7 @@ impl Compiler {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
+                    | Type::Struct { .. }
                     | Type::Ptr(_)
                     | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Mul64),
@@ -778,6 +824,7 @@ impl Compiler {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
+                    | Type::Struct { .. }
                     | Type::Ptr(_)
                     | Type::FuncPtr { .. } => todo!(),
                     Type::U64 => self.emit(I::Div64),
@@ -796,6 +843,7 @@ impl Compiler {
                     }
                     Type::Bool => self.emit(I::Eq08),
                     Type::Array(_, _) => todo!("array comparison"),
+                    Type::Struct { .. } => todo!("struct comparison"),
                     Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Eq64),
                 }
             }
@@ -807,6 +855,7 @@ impl Compiler {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Lt08),
                     Type::Array(_, _) => todo!("array comparison"),
+                    Type::Struct { .. } => todo!("struct comparison"),
                     Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Lt64),
                 }
             }
@@ -818,6 +867,7 @@ impl Compiler {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Gt08),
                     Type::Array(_, _) => todo!("array comparison"),
+                    Type::Struct { .. } => todo!("struct comparison"),
                     Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Gt64),
                 }
             }
@@ -923,7 +973,7 @@ impl Compiler {
                         self.emit(I::Lit64);
                         self.emit(0xFFFF_FFFF_FFFF_FFFF_u64);
                     }
-                    Type::Array(_, _) => {
+                    Type::Struct { .. } | Type::Array(_, _) => {
                         let size = ret_ty.size_of();
                         for _ in 0..size {
                             self.emit(I::Lit08);
@@ -989,7 +1039,7 @@ impl Compiler {
                         Type::Void => {}
                         Type::Bool => self.emit(I::Drop08),
                         Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Drop64),
-                        Type::Array(_, _) => {
+                        Type::Struct { .. } | Type::Array(_, _) => {
                             self.generate_drop(ty.size_of());
                         }
                     }
@@ -1322,7 +1372,7 @@ impl Compiler {
                             Type::Void => {}
                             Type::Bool => self.emit(I::Drop08),
                             Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Drop64),
-                            Type::Array(_, _) => {
+                            Type::Struct { .. } | Type::Array(_, _) => {
                                 self.generate_drop(ty.size_of());
                             }
                         }
