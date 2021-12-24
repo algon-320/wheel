@@ -1,4 +1,4 @@
-use crate::ty::Type;
+use crate::ty::ResolvedType;
 
 #[derive(Debug)]
 pub enum Error {
@@ -8,11 +8,18 @@ pub enum Error {
         msg: String,
     },
     TypeMismatch {
-        expect: Option<Type>,
-        actual: Type,
+        expect: Option<ResolvedType>,
+        actual: ResolvedType,
     },
     CategoryMismatch,
-    UndefVar {
+    UndefinedType {
+        name: String,
+    },
+    UndefinedField {
+        struct_name: String,
+        field_name: String,
+    },
+    UndefinedVar {
         name: String,
     },
 }

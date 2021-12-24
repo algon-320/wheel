@@ -1,129 +1,123 @@
-use crate::ty::Type;
+use crate::ty::TypeBound;
 
-#[derive(Debug, PartialEq)]
-pub struct Program<T: ExprTag> {
-    pub defs: Vec<Def<T>>,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Def<T: ExprTag> {
-    Func(FuncDef<T>),
-    Data(DataDef<T>),
-}
-
-#[derive(Debug, PartialEq)]
-pub struct FuncDef<T: ExprTag> {
-    pub name: String,
-    pub params: Vec<Parameter>,
-    pub ret_ty: Type,
-    pub body: Box<Expr<T>>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct DataDef<T: ExprTag> {
-    pub name: String,
-    pub ty: Type,
-    pub initializer: Box<Expr<T>>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Parameter {
-    pub name: String,
-    pub ty: Type,
-}
-
-pub trait ExprTag: std::fmt::Debug + Clone + PartialEq {}
+pub trait ExprBound: std::fmt::Debug + Clone + PartialEq {}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Expr<T: ExprTag> {
-    pub e: E<T>,
-    pub tag: T,
+pub struct Program<E: ExprBound, T: TypeBound> {
+    pub defs: Vec<Def<E, T>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum E<T: ExprTag> {
+pub enum Def<E: ExprBound, T: TypeBound> {
+    Func(FuncDef<E, T>),
+    Data(DataDef<E, T>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Field<T: TypeBound> {
+    pub name: String,
+    pub ty: T,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FuncDef<E: ExprBound, T: TypeBound> {
+    pub name: String,
+    pub params: Vec<Field<T>>,
+    pub ret_ty: T,
+    pub body: Box<E>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DataDef<E: ExprBound, T: TypeBound> {
+    pub name: String,
+    pub ty: T,
+    pub initializer: Box<E>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr<E: ExprBound> {
     LiteralVoid,
     LiteralBool(bool),
     LiteralU64(u64),
-    LiteralArray(Vec<Box<Expr<T>>>),
+    LiteralArray(Vec<Box<E>>),
 
-    AddrOf(Box<Expr<T>>),
+    AddrOf(Box<E>),
 
     Var(String),
-    PtrDeref(Box<Expr<T>>),
+    PtrDeref(Box<E>),
     ArrayAccess {
-        ptr: Box<Expr<T>>,
-        idx: Box<Expr<T>>,
+        ptr: Box<E>,
+        idx: Box<E>,
     },
 
-    Add(Box<Expr<T>>, Box<Expr<T>>),
-    Sub(Box<Expr<T>>, Box<Expr<T>>),
-    Mul(Box<Expr<T>>, Box<Expr<T>>),
-    Div(Box<Expr<T>>, Box<Expr<T>>),
+    Add(Box<E>, Box<E>),
+    Sub(Box<E>, Box<E>),
+    Mul(Box<E>, Box<E>),
+    Div(Box<E>, Box<E>),
 
-    Eq(Box<Expr<T>>, Box<Expr<T>>),
-    Neq(Box<Expr<T>>, Box<Expr<T>>),
-    Lt(Box<Expr<T>>, Box<Expr<T>>),
-    Gt(Box<Expr<T>>, Box<Expr<T>>),
+    Eq(Box<E>, Box<E>),
+    Neq(Box<E>, Box<E>),
+    Lt(Box<E>, Box<E>),
+    Gt(Box<E>, Box<E>),
 
-    LNot(Box<Expr<T>>),
-    Leq(Box<Expr<T>>, Box<Expr<T>>),
-    Geq(Box<Expr<T>>, Box<Expr<T>>),
-    LAnd(Box<Expr<T>>, Box<Expr<T>>),
-    LOr(Box<Expr<T>>, Box<Expr<T>>),
+    LNot(Box<E>),
+    Leq(Box<E>, Box<E>),
+    Geq(Box<E>, Box<E>),
+    LAnd(Box<E>, Box<E>),
+    LOr(Box<E>, Box<E>),
 
     Call {
-        func: Box<Expr<T>>,
-        args: Vec<Box<Expr<T>>>,
+        func: Box<E>,
+        args: Vec<Box<E>>,
     },
 
     If {
-        cond: Box<Expr<T>>,
-        then_expr: Box<Expr<T>>,
-        else_expr: Option<Box<Expr<T>>>,
+        cond: Box<E>,
+        then_expr: Box<E>,
+        else_expr: Option<Box<E>>,
     },
 
     Loop {
-        body: Box<Expr<T>>,
+        body: Box<E>,
     },
     While {
-        cond: Box<Expr<T>>,
-        body: Box<Expr<T>>,
+        cond: Box<E>,
+        body: Box<E>,
     },
     For {
-        init: Box<Expr<T>>,
-        cond: Box<Expr<T>>,
-        update: Box<Expr<T>>,
-        body: Box<Expr<T>>,
+        init: Box<E>,
+        cond: Box<E>,
+        update: Box<E>,
+        body: Box<E>,
     },
     Break,
     Continue,
 
     Let {
         name: String,
-        value: Box<Expr<T>>,
+        value: Box<E>,
     },
 
     Assignment {
-        location: Box<Expr<T>>,
-        value: Box<Expr<T>>,
+        location: Box<E>,
+        value: Box<E>,
     },
     AssignAdd {
-        location: Box<Expr<T>>,
-        value: Box<Expr<T>>,
+        location: Box<E>,
+        value: Box<E>,
     },
     AssignSub {
-        location: Box<Expr<T>>,
-        value: Box<Expr<T>>,
+        location: Box<E>,
+        value: Box<E>,
     },
     AssignMul {
-        location: Box<Expr<T>>,
-        value: Box<Expr<T>>,
+        location: Box<E>,
+        value: Box<E>,
     },
     AssignDiv {
-        location: Box<Expr<T>>,
-        value: Box<Expr<T>>,
+        location: Box<E>,
+        value: Box<E>,
     },
 
-    Block(Vec<Box<Expr<T>>>),
+    Block(Vec<Box<E>>),
 }
