@@ -1,4 +1,4 @@
-use log::trace;
+use log::{info, trace};
 
 use crate::memory::Memory;
 use crate::num::Int;
@@ -94,7 +94,13 @@ impl Cpu {
             SetBp => self.set_bp(),
             GetSp => self.get_sp(),
             SetSp => self.set_sp(),
-            Abort => return Err(()),
+            Abort => {
+                info!("aborted");
+                info!("IP={} ({:016X})", self.ip, self.ip);
+                info!("SP={} ({:016X})", self.sp, self.sp);
+                info!("BP={} ({:016X})", self.bp, self.bp);
+                return Err(());
+            }
         }
         trace!("");
         Ok(())
