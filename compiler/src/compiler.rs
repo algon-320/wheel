@@ -1280,85 +1280,77 @@ impl Compiler {
                     self.generate_store(ty.size_of());
                 }
             }
-            AssignAdd {
-                mut location,
-                value,
-            } => {
+            AssignAdd { location, value } => {
                 assert_eq!(location.cat, Category::Location);
                 let ty = value.ty.clone();
 
                 self.compile_expr(value)?;
-                location.cat = Category::Regular;
                 self.compile_expr(location.clone())?;
                 match ty.0 {
-                    Type::U64 => self.emit(I::Add64),
+                    Type::U64 => {
+                        self.emit(I::Load64);
+                        self.emit(I::Add64);
+                    }
                     _ => todo!(),
                 }
 
-                location.cat = Category::Location;
                 self.compile_expr(location)?;
                 if ty.size_of() > 0 {
                     self.generate_store(ty.size_of());
                 }
             }
-            AssignSub {
-                mut location,
-                value,
-            } => {
+            AssignSub { location, value } => {
                 assert_eq!(location.cat, Category::Location);
                 let ty = value.ty.clone();
 
                 self.compile_expr(value)?;
-                location.cat = Category::Regular;
                 self.compile_expr(location.clone())?;
                 match ty.0 {
-                    Type::U64 => self.emit(I::Sub64),
+                    Type::U64 => {
+                        self.emit(I::Load64);
+                        self.emit(I::Sub64);
+                    }
                     _ => todo!(),
                 }
 
-                location.cat = Category::Location;
                 self.compile_expr(location)?;
                 if ty.size_of() > 0 {
                     self.generate_store(ty.size_of());
                 }
             }
-            AssignMul {
-                mut location,
-                value,
-            } => {
+            AssignMul { location, value } => {
                 assert_eq!(location.cat, Category::Location);
                 let ty = value.ty.clone();
 
                 self.compile_expr(value)?;
-                location.cat = Category::Regular;
                 self.compile_expr(location.clone())?;
                 match ty.0 {
-                    Type::U64 => self.emit(I::Mul64),
+                    Type::U64 => {
+                        self.emit(I::Load64);
+                        self.emit(I::Mul64);
+                    }
                     _ => todo!(),
                 }
 
-                location.cat = Category::Location;
                 self.compile_expr(location)?;
                 if ty.size_of() > 0 {
                     self.generate_store(ty.size_of());
                 }
             }
-            AssignDiv {
-                mut location,
-                value,
-            } => {
+            AssignDiv { location, value } => {
                 assert_eq!(location.cat, Category::Location);
                 let ty = value.ty.clone();
 
                 self.compile_expr(value)?;
-                location.cat = Category::Regular;
                 self.compile_expr(location.clone())?;
                 match ty.0 {
-                    Type::U64 => self.emit(I::Div64),
+                    Type::U64 => {
+                        self.emit(I::Load64);
+                        self.emit(I::Div64);
+                    }
                     _ => todo!(),
                 }
 
-                location.cat = Category::Location;
                 self.compile_expr(location)?;
                 if ty.size_of() > 0 {
                     self.generate_store(ty.size_of());
