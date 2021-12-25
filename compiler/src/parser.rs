@@ -30,6 +30,7 @@ pub enum Token {
     Minus,
     Star,
     Slash,
+    Dot,
     Colon,
     SemiColon,
     Comma,
@@ -66,7 +67,7 @@ peg::parser! { grammar tokenizer() for str {
             break_() / continue_() /
             let_() / in_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
-            colon() / semicolon() / comma() / equal() / lt() / gt() /
+            dot() / colon() / semicolon() / comma() / equal() / lt() / gt() /
             and() / pipe() / bang() / ident() / number()
           ) end:position!()
           (ws() / comment())*
@@ -97,6 +98,7 @@ peg::parser! { grammar tokenizer() for str {
     rule minus() -> Token = "-" { Token::Minus }
     rule star() -> Token = "*" { Token::Star }
     rule slash() -> Token = "/" { Token::Slash }
+    rule dot() -> Token = "." { Token::Dot }
     rule colon() -> Token = ":" { Token::Colon }
     rule semicolon() -> Token = ";" { Token::SemiColon }
     rule comma() -> Token = "," { Token::Comma }
@@ -211,6 +213,8 @@ peg::parser! { pub grammar parser() for [Token] {
             --
             ptr:@ [LSquareBracket] idx:expr() [RSquareBracket]
                 { wrap(Expr::ArrayAccess{ ptr, idx }) }
+            --
+            obj:@ [Dot] [Ident(field)] { wrap(Expr::MemberAccess { obj, field }) }
             --
 
             e:block_expr() { e }

@@ -104,8 +104,14 @@ impl TypeEnv {
 }
 
 struct TypeChecker {
-    env: TypeEnv,                            // variable --> ResolvedType
-    type_map: HashMap<String, ResolvedType>, // type name --> ResolvedType
+    // variable --> ResolvedType
+    env: TypeEnv,
+
+    // type name --> ResolvedType
+    type_map: HashMap<String, ResolvedType>,
+
+    // struct name --> StructDef
+    struct_def: HashMap<String, StructDef<ResolvedType>>,
 }
 
 impl TypeChecker {
@@ -113,6 +119,7 @@ impl TypeChecker {
         Self {
             env: TypeEnv::new(),
             type_map: HashMap::new(),
+            struct_def: HashMap::new(),
         }
     }
 
@@ -175,6 +182,8 @@ impl TypeChecker {
                 Def::Data(data) => Def::Data(self.type_data_def(data)?),
                 Def::Func(func) => Def::Func(self.type_func_def(func)?),
                 Def::Struct(struct_def) => {
+                    let name = struct_def.name;
+
                     let mut types = Vec::new();
                     let mut typed_fields = Vec::new();
                     for f in struct_def.fields {
@@ -189,15 +198,17 @@ impl TypeChecker {
                     }
 
                     let ty = Type::Struct {
-                        name: struct_def.name.clone(),
+                        name: name.clone(),
                         fields: types,
                     };
-                    self.type_map.insert(struct_def.name.clone(), ty.into());
+                    self.type_map.insert(name.clone(), ty.into());
 
-                    Def::Struct(StructDef {
-                        name: struct_def.name,
+                    let def = StructDef {
+                        name: name.clone(),
                         fields: typed_fields,
-                    })
+                    };
+                    self.struct_def.insert(name, def.clone());
+                    Def::Struct(def)
                 }
             };
             typed_prog.defs.push(typed_def);
@@ -293,7 +304,7 @@ impl TypeChecker {
     fn type_expr(&mut self, expr: Box<ParsedExpr>, cat: Category) -> Result<Box<TypedExpr>, Error> {
         // verify category
         match &expr.e {
-            Var(_) | PtrDeref(_) | ArrayAccess { .. } => {}
+            Var(_) | PtrDeref(_) | ArrayAccess { .. } | MemberAccess { .. } => {}
             _ => {
                 if cat == Category::Location {
                     return Err(Error::CategoryMismatch);
@@ -399,6 +410,25 @@ impl TypeChecker {
                 } else {
                     todo!("index access for non-array type: {:?}", ptr.ty);
                 }
+            }
+
+            MemberAccess { obj, field } => {
+                let obj = self.type_expr(obj, cat)?;
+                let struct_name = match &obj.ty.0 {
+                    Type::Struct { name, .. } => name.clone(),
+                    _ => todo!("member access for non-struct value"),
+                };
+                let def = &self.struct_def[&struct_name];
+                let field_ty = def
+                    .fields
+                    .iter()
+                    .find(|f| f.name == field)
+                    .map(|f| f.ty.clone())
+                    .ok_or_else(|| Error::UndefinedField {
+                        struct_name: struct_name.clone(),
+                        field_name: field.clone(),
+                    })?;
+                wrap(MemberAccess { obj, field }, field_ty)
             }
 
             Add(_, _) | Sub(_, _) | Mul(_, _) | Div(_, _) => {

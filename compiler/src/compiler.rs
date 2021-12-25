@@ -784,6 +784,75 @@ impl Compiler {
                 }
             }
 
+            MemberAccess { obj, field } => {
+                let obj_ty = obj.ty.clone();
+                let obj_cat = obj.cat;
+
+                // TODO: avoid redundant laod
+                self.compile_expr(obj)?;
+
+                let layout = match &obj_ty.0 {
+                    Type::Struct { name, .. } => &self.struct_layout[name],
+                    _ => todo!("member access for non-struct value"),
+                };
+                let offset = layout[&field];
+
+                if obj_cat == Category::Location {
+                    self.emit(I::Lit64);
+                    self.emit(offset);
+                    self.emit(I::Add64);
+                } else if obj_cat == Category::Regular {
+                    assert_eq!(expr_cat, Category::Regular);
+                    let size = expr_ty.size_of();
+
+                    // Example: extract obj.field2
+                    //
+                    //    8: [ field1  ]
+                    //    9: [ field2  ]
+                    //   10: [ field3  ]
+
+                    // 1. load the field
+                    self.emit(I::GetSp);
+                    self.emit(I::Lit64);
+                    self.emit(offset);
+                    self.emit(I::Add64);
+                    self.generate_load(size);
+
+                    //    7: [ field2 ]
+                    //       ----------
+                    //    8: [ field1 ]
+                    //    9: [ field2 ]
+                    //   10: [ field3 ]
+
+                    // 2. replace the obj with the value
+
+                    // 2.1 calculate store address
+                    self.emit(I::GetSp);
+                    self.emit(I::Lit64);
+                    self.emit(obj_ty.size_of()); // size + sizeof(obj) - size
+                    self.emit(I::Add64);
+
+                    //    6: [ 10     ]
+                    //    7: [ field2 ]
+                    //       ----------
+                    //    8: [ field1 ]
+                    //    9: [ field2 ]
+                    //   10: [ field3 ]
+
+                    // 2.2 store the value
+                    self.generate_store(size);
+
+                    //    8: [ field1 ]
+                    //    9: [ field2 ]
+                    //   10: [ field2 ]
+
+                    // 2.3 dicard uninterestead fields
+                    self.generate_drop(obj_ty.size_of() - size);
+
+                    //   10: [ field2 ]
+                }
+            }
+
             Add(lhs, rhs) => {
                 self.compile_expr(lhs)?;
                 self.compile_expr(rhs)?;

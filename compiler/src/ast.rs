@@ -60,6 +60,10 @@ pub enum Expr<E: ExprBound> {
         ptr: Box<E>,
         idx: Box<E>,
     },
+    MemberAccess {
+        obj: Box<E>,
+        field: String,
+    },
 
     Add(Box<E>, Box<E>),
     Sub(Box<E>, Box<E>),

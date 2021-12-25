@@ -1,0 +1,20 @@
+struct Foo {
+    a: u64,
+    b: u64,
+}
+
+fn new_foo(a: u64, b: u64) -> Foo {
+    Foo { a: a, b: b }
+}
+
+fn double(f: *Foo) -> () {
+    (*f).a *= 2;
+    (*f).b *= 2;
+}
+
+fn main() -> u64 {
+    let x = new_foo(10, 100);
+    double(&x);
+    x.a += 2;
+    x.a + x.b  // (10*2+2)+100*2 == 222
+}
