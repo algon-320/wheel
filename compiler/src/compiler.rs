@@ -310,7 +310,15 @@ impl Compiler {
                     self.emit(I::GetSp);
                     self.emit(I::Lit64);
                     self.emit(size - 8);
+                    self.emit(I::Sub64);
                     self.emit(I::SetSp);
+
+                    // copy src
+                    self.emit(I::GetSp);
+                    self.emit(I::Lit64);
+                    self.emit(size - 8);
+                    self.emit(I::Add64);
+                    self.emit(I::Load64);
                 }
 
                 let mut r = size;
@@ -326,9 +334,6 @@ impl Compiler {
 
                     // load src
                     self.emit(I::GetSp);
-                    self.emit(I::Lit64);
-                    self.emit(8_u64);
-                    self.emit(I::Add64);
                     self.emit(I::Load64);
                     // +p
                     self.emit(I::Lit64);
@@ -351,9 +356,10 @@ impl Compiler {
                     r -= n;
                 }
 
-                self.emit(I::Drop64); // src
                 if size < 8 {
                     self.generate_drop(8 - size);
+                } else {
+                    self.emit(I::Drop64); // src
                 }
             }
         }
