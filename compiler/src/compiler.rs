@@ -96,13 +96,6 @@ enum Addr {
     ArrayData(PointerId),
 }
 
-#[derive(Debug, Clone)]
-struct StaticData {
-    data_location: PointerId,
-    ty: ResolvedType,
-    initializer_name: String,
-}
-
 struct LoopContext {
     begin_of_loop: PointerId,
     end_of_loop: PointerId,
@@ -169,10 +162,12 @@ pub struct Compiler {
     next_bb: BlockId,
     next_ptr_id: PointerId,
 
+    entry_point_bb: BlockId,
+    static_data_bb: BlockId,
+
     debug: bool,
     env: Environment,
     struct_layout: HashMap<String, StructLayout>,
-    static_data: Vec<StaticData>,
     loop_context: Stack<LoopContext>,
 }
 
@@ -183,17 +178,30 @@ impl Compiler {
         let mut env = Environment::new();
         env.create_new_scope();
 
-        Self {
+        let mut c = Self {
             bbs: HashMap::new(),
             emit_bb: BlockId(0),
-            next_bb: BlockId(1),
+            next_bb: BlockId(0),
             next_ptr_id: PointerId(1),
+            entry_point_bb: BlockId(0),
+            static_data_bb: BlockId(0),
             debug,
             env,
             struct_layout: HashMap::new(),
-            static_data: Vec::new(),
             loop_context: Stack::new(),
+        };
+
+        // Initialize special basic blocks
+        {
+            let (ep, _) = c.new_block();
+            c.set_insertion_point(ep);
+            c.entry_point_bb = ep;
+
+            let (data_bb, _) = c.new_block();
+            c.static_data_bb = data_bb;
         }
+
+        c
     }
 
     fn new_block(&mut self) -> (BlockId, PointerId) {
@@ -425,40 +433,13 @@ impl Compiler {
             }
         }
 
-        let static_data = self.static_data.clone();
-
-        let (entry_point, _) = self.new_block();
+        let entry_point = self.entry_point_bb;
         {
             self.set_insertion_point(entry_point);
-
-            // Initialize static data
-            for sd in static_data.iter() {
-                // Call initializer
-                let ret_ty = sd.ty.clone();
-                let name = sd.initializer_name.clone();
-                self.generate_function_call_no_arg(name, ret_ty)?;
-
-                // Store the returned value at the data location
-                if sd.ty.size_of() > 0 {
-                    self.emit(I::Lit64);
-                    self.emit(Ir::Pointer(sd.data_location));
-                    self.generate_store(sd.ty.size_of());
-                }
-            }
 
             // Call the main
             self.generate_function_call_no_arg("main".to_owned(), Type::U64.into())?; // FIXME: return type
             self.emit(I::Abort);
-        }
-
-        // Make space for static data
-        let (data_bb, _) = self.new_block();
-        self.set_insertion_point(data_bb);
-        for sd in static_data {
-            self.emit(Ir::Pointee(sd.data_location));
-            let size = sd.ty.size_of();
-            // NOTE: the value 0xBB is meaningless (just for ease of debuging)
-            self.emit(Ir::RawBytes(vec![0xBB; size as usize]));
         }
 
         debug!("entry = {:?}", entry_point);
@@ -489,7 +470,9 @@ impl Compiler {
                 }
             };
 
-            let entry = self.bbs.remove(&entry_point).unwrap();
+            let entry_point_bb = self.entry_point_bb;
+            let entry = self.bbs.remove(&entry_point_bb).unwrap();
+            let data_bb = self.static_data_bb;
             let data_section = self.bbs.remove(&data_bb).unwrap();
 
             // Put the entry point bb at the very beginning
@@ -541,12 +524,33 @@ impl Compiler {
         };
         self.env.insert(data.name, addr, None);
 
-        self.static_data.push(StaticData {
-            data_location,
-            ty,
-            initializer_name,
-        });
+        let old_bb = self.emit_bb;
 
+        // Append a call for the initializer
+        {
+            self.set_insertion_point(self.entry_point_bb);
+
+            // Call initializer
+            self.generate_function_call_no_arg(initializer_name, ty.clone())?;
+            // Store the return value at the data location
+            if ty.size_of() > 0 {
+                self.emit(I::Lit64);
+                self.emit(Ir::Pointer(data_location));
+                self.generate_store(ty.size_of());
+            }
+        }
+
+        // Extend the data_bb
+        {
+            self.set_insertion_point(self.static_data_bb);
+
+            self.emit(Ir::Pointee(data_location));
+            let size = ty.size_of();
+            // NOTE: the value 0xBB is meaningless (just for ease of debuging)
+            self.emit(Ir::RawBytes(vec![0xBB; size as usize]));
+        }
+
+        self.set_insertion_point(old_bb);
         Ok(())
     }
 
