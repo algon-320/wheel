@@ -89,6 +89,16 @@ pub fn disas(bin: &[u8]) -> String {
                 ));
             }
 
+            I::DebugComment => {
+                let len = iter.next().unwrap().1;
+                let mut bytes = vec![0; len as usize];
+                for b in bytes.iter_mut() {
+                    *b = iter.next().unwrap().1;
+                }
+                let s = String::from_utf8(bytes).expect("invalid UTF-8");
+                buf.push_str(&format!("comment:\t{}\n", s));
+            }
+
             _ => {
                 buf.push_str(&format!("0x{:016X}: \t{:?}\n", addr, op));
             }

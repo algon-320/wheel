@@ -375,6 +375,13 @@ get_sp:
 abort:
   jmp   exit
 
+debug_comment:
+  movq  $0, %rax
+  movb  (%r11), %al
+  incq  %r11
+  addq  %rax, %r11
+  jmp   eval
+
 # void vm_main(void *text, void *stack)
 #   text: %rdi
 #  stack: %rsi
@@ -552,6 +559,12 @@ vm_main:
   movq  %rbx, (%rax)
   addq  $8, %rax
   lea   abort(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+
+  lea   op_table(%rip), %rax
+  addq  $(0xF0 * 8), %rax
+  lea   debug_comment(%rip), %rbx
   movq  %rbx, (%rax)
   addq  $8, %rax
 

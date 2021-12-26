@@ -947,3 +947,21 @@ fn abort() {
     let mut cpu = Cpu::new(mem);
     assert!(cpu.execute().is_err());
 }
+
+#[test]
+fn debug_comment() {
+    let mut mem = Memory::new(0x1000);
+    let s = "hello,world!".to_owned();
+    write_text(
+        &mut mem,
+        0,
+        &[
+            I::DebugComment.into(),
+            TextElem::Data(vec![s.len() as u8]),
+            TextElem::Data(s.as_bytes().to_vec()),
+        ],
+    );
+    let mut cpu = Cpu::new(mem);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.ip, 2 + s.len() as u64);
+}

@@ -54,8 +54,20 @@ op_label = [
    "abort",
 ]
 
+debug_op_label = [
+    "debug_comment"
+]
+
 print("lea   op_table(%rip), %rax")
 for name in op_label:
-  print("lea   {}(%rip), %rbx".format(name))
-  print("movq  %rbx, (%rax)")
-  print("addq  $8, %rax")
+    print("lea   {}(%rip), %rbx".format(name))
+    print("movq  %rbx, (%rax)")
+    print("addq  $8, %rax")
+
+# debug instruction origin: 0xF0
+print("lea   op_table(%rip), %rax")
+print("addq  $(0xF0 * 8), %rax")
+for name in debug_op_label:
+    print("lea   {}(%rip), %rbx".format(name))
+    print("movq  %rbx, (%rax)")
+    print("addq  $8, %rax")

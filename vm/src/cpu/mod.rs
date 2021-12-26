@@ -1,4 +1,4 @@
-use log::{info, trace};
+use log::{debug, info, trace};
 
 use crate::memory::Memory;
 use crate::num::Int;
@@ -101,6 +101,8 @@ impl Cpu {
                 info!("BP={} ({:016X})", self.bp, self.bp);
                 return Err(());
             }
+
+            DebugComment => self.debug_comment(),
         }
         trace!("");
         Ok(())
@@ -282,6 +284,20 @@ impl Cpu {
         let new_sp = self.stack_pop::<u64>();
         trace!("set_sp: sp={}", new_sp);
         self.sp = new_sp;
+    }
+
+    #[inline]
+    fn debug_comment(&mut self) {
+        let len = self.mem.read(self.ip).unwrap();
+        self.ip += 1;
+
+        let mut bytes = vec![0; len as usize];
+        for b in bytes.iter_mut() {
+            *b = self.mem.read(self.ip).unwrap();
+            self.ip += 1;
+        }
+        let s = String::from_utf8(bytes).expect("invalid UTF-8");
+        debug!("comment: {}", s);
     }
 }
 

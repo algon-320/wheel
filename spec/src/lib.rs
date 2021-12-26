@@ -56,6 +56,8 @@ pub enum Instruction {
     SetSp = 50,
     GetSp = 51,
     Abort = 52,
+
+    DebugComment = 0xF0,
 }
 
 impl From<Instruction> for u8 {
