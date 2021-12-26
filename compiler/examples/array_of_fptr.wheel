@@ -1,0 +1,16 @@
+fn a(n: u64) -> u64 { n + 1 }
+fn b(n: u64) -> u64 { n - 2 }
+fn c(n: u64) -> u64 { n * 3 }
+fn d(n: u64) -> u64 { n / 4 }
+
+let F: [fn(u64)->u64; 7] = [a, a, c, b, c, a, d];
+
+fn main() -> u64 {
+    let s = 0;
+    for let i = 0; i < 7; i += 1 {
+        s = F[i](s);
+    }
+
+    // (((0+1+1)*3-2)*3+1)/4
+    s
+}
