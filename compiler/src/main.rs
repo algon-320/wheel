@@ -15,6 +15,9 @@ struct CliOpt {
 
     #[structopt(short = "o", default_value = "out.bin", parse(from_os_str))]
     output: PathBuf,
+
+    #[structopt(short = "g")]
+    debug: bool,
 }
 
 fn main() {
@@ -25,7 +28,7 @@ fn main() {
     println!("output: {:?}", opt.output);
 
     let source = std::fs::read_to_string(opt.source).expect("read_to_string");
-    match compile(&source) {
+    match compile(&source, opt.debug) {
         Ok(text) => {
             std::fs::write(opt.output, text).expect("write");
         }
@@ -36,8 +39,8 @@ fn main() {
     }
 }
 
-pub fn compile(source: &str) -> Result<Vec<u8>, Error> {
+pub fn compile(source: &str, debug: bool) -> Result<Vec<u8>, Error> {
     let program = parser::parse_program(source)?;
     let program = ty::type_program(program)?;
-    Ok(compiler::compile(program))
+    compiler::Compiler::new(debug).compile(program)
 }

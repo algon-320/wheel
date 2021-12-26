@@ -165,12 +165,13 @@ impl Environment {
 
 type StructLayout = HashMap<String, u64>;
 
-struct Compiler {
+pub struct Compiler {
     bbs: HashMap<BlockId, BasicBlock>,
     emit_bb: BlockId,
     next_bb: BlockId,
     next_ptr_id: PointerId,
 
+    debug: bool,
     env: Environment,
     struct_layout: HashMap<String, StructLayout>,
     static_data: Vec<StaticData>,
@@ -178,7 +179,9 @@ struct Compiler {
 }
 
 impl Compiler {
-    fn new() -> Self {
+    pub fn new(debug: bool) -> Self {
+        log::info!("debug: {}", if debug { "enabled" } else { "disabled" });
+
         let mut env = Environment::new();
         env.create_new_scope();
 
@@ -187,6 +190,7 @@ impl Compiler {
             emit_bb: BlockId(0),
             next_bb: BlockId(1),
             next_ptr_id: PointerId(1),
+            debug,
             env,
             struct_layout: HashMap::new(),
             static_data: Vec::new(),
@@ -220,6 +224,20 @@ impl Compiler {
     fn emit<T: Into<Ir>>(&mut self, e: T) {
         let bb = self.bbs.get_mut(&self.emit_bb).unwrap();
         bb.buf.push(e.into());
+    }
+
+    fn emit_debug_comment(&mut self, comment: &str) {
+        if self.debug {
+            let bb = self.bbs.get_mut(&self.emit_bb).unwrap();
+            bb.buf.push(I::DebugComment.into());
+            let bytes = comment.as_bytes();
+            assert!(bytes.len() < 256);
+            let len = bytes.len() as u8;
+            bb.buf.push(Ir::Data08(len));
+            for &b in bytes {
+                bb.buf.push(Ir::Data08(b));
+            }
+        }
     }
 
     fn generate_function_call_no_arg(
@@ -257,6 +275,7 @@ impl Compiler {
             4 => self.emit(I::Store32),
             8 => self.emit(I::Store64),
             _ => {
+                self.emit_debug_comment(&format!("store {} bytes: begin", size));
                 let mut r = size;
                 let mut p = 0_u64;
                 while r > 0 {
@@ -294,6 +313,7 @@ impl Compiler {
                 }
 
                 self.generate_drop(size + 8 /*dst*/);
+                self.emit_debug_comment(&format!("store {} bytes: end", size));
             }
         }
     }
@@ -385,7 +405,7 @@ impl Compiler {
         }
     }
 
-    fn compile(mut self, prog: Program<TypedExpr, ResolvedType>) -> Result<Vec<u8>, Error> {
+    pub fn compile(mut self, prog: Program<TypedExpr, ResolvedType>) -> Result<Vec<u8>, Error> {
         for def in prog.defs {
             match def {
                 Def::Struct(def) => {
@@ -1453,8 +1473,4 @@ impl Compiler {
 
         Ok(())
     }
-}
-
-pub fn compile(prog: Program<TypedExpr, ResolvedType>) -> Vec<u8> {
-    Compiler::new().compile(prog).expect("compilation error")
 }
