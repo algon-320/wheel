@@ -157,6 +157,8 @@ impl Environment {
 type StructLayout = HashMap<String, u64>;
 
 pub struct Compiler {
+    debug: bool,
+
     bbs: HashMap<BlockId, BasicBlock>,
     emit_bb: BlockId,
     next_bb: BlockId,
@@ -165,7 +167,6 @@ pub struct Compiler {
     entry_point_bb: BlockId,
     static_data_bb: BlockId,
 
-    debug: bool,
     env: Environment,
     struct_layout: HashMap<String, StructLayout>,
     loop_context: Stack<LoopContext>,
@@ -179,13 +180,16 @@ impl Compiler {
         env.create_new_scope();
 
         let mut c = Self {
+            debug,
+
             bbs: HashMap::new(),
             emit_bb: BlockId(0),
             next_bb: BlockId(0),
             next_ptr_id: PointerId(1),
+
             entry_point_bb: BlockId(0),
             static_data_bb: BlockId(0),
-            debug,
+
             env,
             struct_layout: HashMap::new(),
             loop_context: Stack::new(),
