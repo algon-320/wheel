@@ -27,40 +27,38 @@ fn store_nb(nb: u8) -> I {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Ir {
     OpCode(I),
-    Data08(u8),
-    Data16(u16),
-    Data32(u32),
-    Data64(u64),
+    RawBytes(Vec<u8>),
     Pointer(PointerId),
     Pointee(PointerId),
 }
-macro_rules! impl_from {
-    ($t:ty, $var:ident) => {
+impl From<I> for Ir {
+    fn from(i: I) -> Ir {
+        Ir::OpCode(i)
+    }
+}
+macro_rules! impl_from_int {
+    ($t:ty) => {
         impl From<$t> for Ir {
             fn from(x: $t) -> Self {
-                Self::$var(x)
+                Self::RawBytes(x.to_le_bytes().to_vec())
             }
         }
     };
 }
-impl_from! {I,   OpCode}
-impl_from! {u8,  Data08}
-impl_from! {u16, Data16}
-impl_from! {u32, Data32}
-impl_from! {u64, Data64}
+impl_from_int! {u8}
+impl_from_int! {u16}
+impl_from_int! {u32}
+impl_from_int! {u64}
 
 impl From<Ir> for Vec<u8> {
     fn from(ir: Ir) -> Vec<u8> {
         use Ir::*;
         match ir {
             OpCode(op) => vec![op.into()],
-            Data08(x) => vec![x],
-            Data16(x) => x.to_le_bytes().to_vec(),
-            Data32(x) => x.to_le_bytes().to_vec(),
-            Data64(x) => x.to_le_bytes().to_vec(),
+            RawBytes(bytes) => bytes,
             Pointer(_) => vec![0xAA_u8; 8],
             Pointee(_) => vec![],
         }
@@ -230,13 +228,13 @@ impl Compiler {
         if self.debug {
             let bb = self.bbs.get_mut(&self.emit_bb).unwrap();
             bb.buf.push(I::DebugComment.into());
-            let bytes = comment.as_bytes();
-            assert!(bytes.len() < 256);
-            let len = bytes.len() as u8;
-            bb.buf.push(Ir::Data08(len));
-            for &b in bytes {
-                bb.buf.push(Ir::Data08(b));
-            }
+            let utf8_bytes = comment.as_bytes();
+            assert!(utf8_bytes.len() < 256);
+            let len = utf8_bytes.len() as u8;
+
+            let mut bytes = vec![len];
+            bytes.extend(utf8_bytes);
+            bb.buf.push(Ir::RawBytes(bytes));
         }
     }
 
@@ -459,10 +457,8 @@ impl Compiler {
         for sd in static_data {
             self.emit(Ir::Pointee(sd.data_location));
             let size = sd.ty.size_of();
-            for _ in 0..size {
-                // NOTE: the value 0xBB is meaningless (just for ease of debuging)
-                self.emit(Ir::Data08(0xBB));
-            }
+            // NOTE: the value 0xBB is meaningless (just for ease of debuging)
+            self.emit(Ir::RawBytes(vec![0xBB; size as usize]));
         }
 
         debug!("entry = {:?}", entry_point);
@@ -596,7 +592,7 @@ impl Compiler {
             let bb = self.bbs.get_mut(&func_bb).unwrap();
             let mut old_buf = std::mem::take(&mut bb.buf);
 
-            bb.buf.push(old_buf[0]); // pointer
+            bb.buf.push(old_buf[0].clone()); // pointer
             self.set_insertion_point(func_bb);
             {
                 // SP = SP - local_vars_size
