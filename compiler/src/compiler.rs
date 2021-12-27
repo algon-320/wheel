@@ -96,6 +96,30 @@ enum Addr {
     ArrayData(PointerId),
 }
 
+struct FunctionContext {
+    stack_cursor: u64,
+    required_memory: u64,
+}
+impl FunctionContext {
+    fn new() -> Self {
+        Self {
+            stack_cursor: 0,
+            required_memory: 0,
+        }
+    }
+
+    fn allocate(&mut self, size: u64) -> u64 {
+        self.stack_cursor += size;
+        self.required_memory = std::cmp::max(self.required_memory, self.stack_cursor);
+        self.stack_cursor
+    }
+
+    fn deallocate(&mut self, size: u64) -> u64 {
+        self.stack_cursor -= size;
+        self.stack_cursor
+    }
+}
+
 struct LoopContext {
     begin_of_loop: PointerId,
     end_of_loop: PointerId,
@@ -106,37 +130,29 @@ struct Scope {
     size: u64,
 }
 struct Environment {
-    stack: Stack<Scope>,
-    mem_cur: u64,
-    mem_max: u64,
+    scopes: Stack<Scope>,
 }
 impl Environment {
     pub fn new() -> Self {
         Self {
-            stack: Stack::new(),
-            mem_cur: 0,
-            mem_max: 0,
+            scopes: Stack::new(),
         }
     }
 
     pub fn create_new_scope(&mut self) {
-        self.stack.push(Scope {
+        self.scopes.push(Scope {
             dict: HashMap::new(),
             size: 0,
         });
     }
     pub fn pop_scope(&mut self) -> Option<Scope> {
-        let scope = self.stack.pop()?;
-        self.mem_cur -= scope.size;
+        let scope = self.scopes.pop()?;
         Some(scope)
     }
 
-    pub fn insert(&mut self, name: String, addr: Addr, size: Option<u64>) {
-        let scope = &mut self.stack.last_mut().unwrap();
-
-        scope.size += size.unwrap_or(0);
-        self.mem_cur += size.unwrap_or(0);
-        self.mem_max = std::cmp::max(self.mem_max, self.mem_cur);
+    pub fn insert(&mut self, name: String, addr: Addr, size: u64) {
+        let scope = &mut self.scopes.last_mut().unwrap();
+        scope.size += size;
 
         let old = scope.dict.insert(name.clone(), addr);
         if old.is_some() {
@@ -145,7 +161,7 @@ impl Environment {
     }
 
     pub fn get(&self, var_name: &str) -> Option<Addr> {
-        for scope in self.stack.iter().rev() {
+        for scope in self.scopes.iter().rev() {
             if let Some(&addr) = scope.dict.get(var_name) {
                 return Some(addr);
             }
@@ -169,7 +185,8 @@ pub struct Compiler {
 
     env: Environment,
     struct_layout: HashMap<String, StructLayout>,
-    loop_context: Stack<LoopContext>,
+    func_ctx: Option<FunctionContext>,
+    loop_ctx: Stack<LoopContext>,
 }
 
 impl Compiler {
@@ -192,7 +209,8 @@ impl Compiler {
 
             env,
             struct_layout: HashMap::new(),
-            loop_context: Stack::new(),
+            func_ctx: None,
+            loop_ctx: Stack::new(),
         };
 
         // Initialize special basic blocks
@@ -526,7 +544,7 @@ impl Compiler {
         } else {
             Addr::Data(data_location)
         };
-        self.env.insert(data.name, addr, None);
+        self.env.insert(data.name, addr, ty.size_of() as u64);
 
         let old_bb = self.emit_bb;
 
@@ -562,13 +580,13 @@ impl Compiler {
         let (func_bb, func_addr) = self.new_block();
         self.set_insertion_point(func_bb);
 
-        self.env.insert(fun.name, Addr::Function(func_addr), None);
+        self.env.insert(fun.name, Addr::Function(func_addr), 0);
 
         //----------------------------------------------------------------------
         // create a scope for parameter
         self.env.create_new_scope();
 
-        let mut offset = 16;
+        let mut offset = 16; // return IP + caller BP
         for p in fun.params.iter() {
             let addr = if p.ty.is_array() {
                 Addr::ArrayBpRel(offset)
@@ -576,24 +594,22 @@ impl Compiler {
                 Addr::BpRel(offset)
             };
 
-            self.env.insert(p.name.clone(), addr, None);
-            offset += p.ty.size_of() as i64;
+            let size = p.ty.size_of() as u64;
+            self.env.insert(p.name.clone(), addr, size);
+            offset += size as i64;
         }
 
-        self.env.mem_max = 0;
-        self.env.mem_cur = 0;
-
+        self.func_ctx = Some(FunctionContext::new());
         self.compile_expr(fun.body)?;
-
-        let local_vars_size = self.env.mem_max;
+        let fctx = self.func_ctx.take().unwrap();
 
         self.env.pop_scope().expect("scope unbalanced");
         //----------------------------------------------------------------------
 
+        let local_vars_size = fctx.required_memory;
         debug!("local_vars_size: {}", local_vars_size);
 
-        // make space for local variables
-        // FIXME
+        // Prologue
         {
             let old_bb = self.emit_bb;
 
@@ -602,21 +618,21 @@ impl Compiler {
 
             bb.buf.push(old_buf[0].clone()); // pointer
             self.set_insertion_point(func_bb);
-            {
-                // SP = SP - local_vars_size
-                self.emit(I::GetSp);
-                self.emit(I::Lit64);
-                self.emit(local_vars_size);
-                self.emit(I::Sub64);
-                self.emit(I::SetSp);
 
-                let bb = self.bbs.get_mut(&func_bb).unwrap();
-                bb.buf.extend(old_buf.drain(1..));
-            }
+            // SP = SP - local_vars_size
+            self.emit(I::GetSp);
+            self.emit(I::Lit64);
+            self.emit(local_vars_size);
+            self.emit(I::Sub64);
+            self.emit(I::SetSp);
+
+            let bb = self.bbs.get_mut(&func_bb).unwrap();
+            bb.buf.extend(old_buf.drain(1..));
+
             self.set_insertion_point(old_bb);
         }
 
-        // Return
+        // Epilogue
         {
             //                <-- SP
             // [ ret val    ]
@@ -655,7 +671,7 @@ impl Compiler {
                 self.emit(I::Load64);
                 self.emit(I::SetBp);
             }
-            // Jump to the caller
+            // Return to the caller
             self.emit(I::Load64);
             self.emit(I::Jump);
         }
@@ -1208,7 +1224,7 @@ impl Compiler {
             Loop { body } => {
                 let begin = self.new_pointer();
                 let cont = self.new_pointer();
-                self.loop_context.push(LoopContext {
+                self.loop_ctx.push(LoopContext {
                     begin_of_loop: begin,
                     end_of_loop: cont,
                 });
@@ -1221,14 +1237,14 @@ impl Compiler {
                     self.emit(Ir::Pointer(begin));
                     self.emit(I::Jump);
                 }
-                self.loop_context.pop();
+                self.loop_ctx.pop();
                 self.emit(Ir::Pointee(cont));
             }
 
             While { cond, body } => {
                 let begin = self.new_pointer();
                 let cont = self.new_pointer();
-                self.loop_context.push(LoopContext {
+                self.loop_ctx.push(LoopContext {
                     begin_of_loop: begin,
                     end_of_loop: cont,
                 });
@@ -1257,7 +1273,7 @@ impl Compiler {
                     self.emit(I::Jump);
                 }
 
-                self.loop_context.pop();
+                self.loop_ctx.pop();
                 self.emit(Ir::Pointee(cont));
             }
 
@@ -1275,7 +1291,7 @@ impl Compiler {
                 let begin = self.new_pointer();
                 let check = self.new_pointer();
                 let cont = self.new_pointer();
-                self.loop_context.push(LoopContext {
+                self.loop_ctx.push(LoopContext {
                     begin_of_loop: begin,
                     end_of_loop: cont,
                 });
@@ -1309,10 +1325,11 @@ impl Compiler {
                     self.emit(I::Jump);
                 }
 
-                self.loop_context.pop();
+                self.loop_ctx.pop();
                 self.emit(Ir::Pointee(cont));
 
-                self.env.pop_scope().expect("scope unbalanced");
+                let scope = self.env.pop_scope().expect("scope unbalanced");
+                self.func_ctx.as_mut().unwrap().deallocate(scope.size);
                 //--------------------------------------------------------------
             }
 
@@ -1323,7 +1340,7 @@ impl Compiler {
                 // e.g. `loop { loop { f(break, 123) } }`
                 // endlessly consumes the stack.
 
-                let cont = match self.loop_context.last() {
+                let cont = match self.loop_ctx.last() {
                     None => todo!("`break` only allowed inside a loop"),
                     Some(lc) => lc.end_of_loop,
                 };
@@ -1333,7 +1350,7 @@ impl Compiler {
             }
             Continue => {
                 // FIXME: Drop temporal values when getting back to the begining.
-                let begin = match self.loop_context.last() {
+                let begin = match self.loop_ctx.last() {
                     None => todo!("`continue` only allowed inside a loop"),
                     Some(lc) => lc.begin_of_loop,
                 };
@@ -1345,7 +1362,7 @@ impl Compiler {
             Let { name, value } => {
                 let var_ty = value.ty.clone();
                 let var_size = var_ty.size_of();
-                let offset = self.env.mem_cur + var_size;
+                let offset = self.func_ctx.as_mut().unwrap().allocate(var_size);
 
                 self.compile_expr(value)?;
 
@@ -1362,7 +1379,7 @@ impl Compiler {
                 } else {
                     Addr::BpRel(-(offset as i64))
                 };
-                self.env.insert(name, addr, Some(var_size));
+                self.env.insert(name, addr, var_size);
             }
 
             Assignment { location, value } => {
@@ -1470,7 +1487,8 @@ impl Compiler {
                     }
                 }
 
-                self.env.pop_scope().expect("scope unbalanced");
+                let scope = self.env.pop_scope().expect("scope unbalanced");
+                self.func_ctx.as_mut().unwrap().deallocate(scope.size);
                 //--------------------------------------------------------------
             }
         }
