@@ -276,10 +276,13 @@ impl Compiler {
         use Expr::*;
         let func = TypedExpr {
             e: Var(name),
-            ty: Type::FuncPtr {
-                params: vec![],
-                ret_ty: ret_ty.clone().into(),
-            }
+            ty: Type::Ptr(Box::new(
+                Type::Func {
+                    params: vec![],
+                    ret_ty: ret_ty.clone().into(),
+                }
+                .into(),
+            ))
             .into(),
             cat: Category::Regular,
         };
@@ -901,9 +904,9 @@ impl Compiler {
                     | Type::Bool
                     | Type::Array(_, _)
                     | Type::Struct { .. }
-                    | Type::Ptr(_)
-                    | Type::FuncPtr { .. } => todo!(),
+                    | Type::Ptr(_) => todo!(),
                     Type::U64 => self.emit(I::Add64),
+                    Type::Func { .. } => unimplemented!(),
                 }
             }
             Sub(lhs, rhs) => {
@@ -914,9 +917,9 @@ impl Compiler {
                     | Type::Bool
                     | Type::Array(_, _)
                     | Type::Struct { .. }
-                    | Type::Ptr(_)
-                    | Type::FuncPtr { .. } => todo!(),
+                    | Type::Ptr(_) => todo!(),
                     Type::U64 => self.emit(I::Sub64),
+                    Type::Func { .. } => unimplemented!(),
                 }
             }
             Mul(lhs, rhs) => {
@@ -927,9 +930,9 @@ impl Compiler {
                     | Type::Bool
                     | Type::Array(_, _)
                     | Type::Struct { .. }
-                    | Type::Ptr(_)
-                    | Type::FuncPtr { .. } => todo!(),
+                    | Type::Ptr(_) => todo!(),
                     Type::U64 => self.emit(I::Mul64),
+                    Type::Func { .. } => unimplemented!(),
                 }
             }
             Div(lhs, rhs) => {
@@ -940,9 +943,9 @@ impl Compiler {
                     | Type::Bool
                     | Type::Array(_, _)
                     | Type::Struct { .. }
-                    | Type::Ptr(_)
-                    | Type::FuncPtr { .. } => todo!(),
+                    | Type::Ptr(_) => todo!(),
                     Type::U64 => self.emit(I::Div64),
+                    Type::Func { .. } => unimplemented!(),
                 }
             }
 
@@ -959,7 +962,8 @@ impl Compiler {
                     Type::Bool => self.emit(I::Eq08),
                     Type::Array(_, _) => todo!("array comparison"),
                     Type::Struct { .. } => todo!("struct comparison"),
-                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Eq64),
+                    Type::U64 | Type::Ptr(_) => self.emit(I::Eq64),
+                    Type::Func { .. } => unimplemented!(),
                 }
             }
             Lt(lhs, rhs) => {
@@ -971,7 +975,8 @@ impl Compiler {
                     Type::Bool => self.emit(I::Lt08),
                     Type::Array(_, _) => todo!("array comparison"),
                     Type::Struct { .. } => todo!("struct comparison"),
-                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Lt64),
+                    Type::U64 | Type::Ptr(_) => self.emit(I::Lt64),
+                    Type::Func { .. } => unimplemented!(),
                 }
             }
             Gt(lhs, rhs) => {
@@ -983,7 +988,8 @@ impl Compiler {
                     Type::Bool => self.emit(I::Gt08),
                     Type::Array(_, _) => todo!("array comparison"),
                     Type::Struct { .. } => todo!("struct comparison"),
-                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Gt64),
+                    Type::U64 | Type::Ptr(_) => self.emit(I::Gt64),
+                    Type::Func { .. } => unimplemented!(),
                 }
             }
 
@@ -1073,7 +1079,10 @@ impl Compiler {
 
                 let fun_ty = func.ty.clone();
                 let (params_ty, ret_ty) = match fun_ty.0 {
-                    Type::FuncPtr { params, ret_ty } => (params, *ret_ty),
+                    Type::Ptr(inner) => match inner.0 {
+                        Type::Func { params, ret_ty } => (params, *ret_ty),
+                        _ => unreachable!(),
+                    },
                     _ => unreachable!(),
                 };
 
@@ -1084,7 +1093,7 @@ impl Compiler {
                         self.emit(I::Lit08);
                         self.emit(0xFF_u8);
                     }
-                    Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => {
+                    Type::U64 | Type::Ptr(_) => {
                         self.emit(I::Lit64);
                         self.emit(0xFFFF_FFFF_FFFF_FFFF_u64);
                     }
@@ -1102,6 +1111,7 @@ impl Compiler {
                         // self.emit(I::Sub64);
                         // self.emit(I::SetSp);
                     }
+                    Type::Func { .. } => unreachable!(),
                 }
 
                 // push arguments (in reverse order)
@@ -1153,10 +1163,11 @@ impl Compiler {
                     match ty.0 {
                         Type::Void => {}
                         Type::Bool => self.emit(I::Drop08),
-                        Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Drop64),
+                        Type::U64 | Type::Ptr(_) => self.emit(I::Drop64),
                         Type::Struct { .. } | Type::Array(_, _) => {
                             self.generate_drop(ty.size_of());
                         }
+                        Type::Func { .. } => unreachable!(),
                     }
                 }
             }
@@ -1479,10 +1490,11 @@ impl Compiler {
                         match ty.0 {
                             Type::Void => {}
                             Type::Bool => self.emit(I::Drop08),
-                            Type::U64 | Type::Ptr(_) | Type::FuncPtr { .. } => self.emit(I::Drop64),
+                            Type::U64 | Type::Ptr(_) => self.emit(I::Drop64),
                             Type::Struct { .. } | Type::Array(_, _) => {
                                 self.generate_drop(ty.size_of());
                             }
+                            Type::Func { .. } => unimplemented!(),
                         }
                     }
                 }

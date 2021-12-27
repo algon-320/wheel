@@ -11,7 +11,7 @@ pub enum Type<T: TypeBound> {
     U64,
     Array(Box<T>, usize),
     Ptr(Box<T>),
-    FuncPtr { params: Vec<T>, ret_ty: Box<T> },
+    Func { params: Vec<T>, ret_ty: Box<T> },
     Struct { name: String, fields: Vec<T> },
 }
 
@@ -27,7 +27,8 @@ impl ResolvedType {
             Type::U64 => 8,
             Type::Array(elem, len) => elem.size_of() * (*len as u64),
             Type::Struct { fields, .. } => fields.iter().fold(0_u64, |a, f| a + f.size_of()),
-            Type::Ptr(_) | Type::FuncPtr { .. } => 8,
+            Type::Ptr(_) => 8,
+            Type::Func { .. } => unimplemented!("function size"),
         }
     }
 
@@ -141,13 +142,13 @@ impl TypeChecker {
                         ResolvedType(Type::Ptr(inner.into()))
                     }
 
-                    Type::FuncPtr { params, ret_ty } => {
+                    Type::Func { params, ret_ty } => {
                         let params = params
                             .into_iter()
                             .map(|ty| self.resolve(ty))
                             .collect::<Result<Vec<_>, _>>()?;
                         let ret_ty = self.resolve(*ret_ty)?.into();
-                        ResolvedType(Type::FuncPtr { params, ret_ty })
+                        ResolvedType(Type::Func { params, ret_ty })
                     }
 
                     Type::Struct { name, fields } => {
@@ -267,7 +268,7 @@ impl TypeChecker {
             })
             .collect::<Result<_, Error>>()?;
 
-        let ty = Type::FuncPtr {
+        let ty = Type::Func {
             params: params.iter().map(|p| p.ty.clone()).collect(),
             ret_ty: ret_ty.clone().into(),
         };
@@ -374,7 +375,14 @@ impl TypeChecker {
             }
 
             Var(var_name) => match self.env.get(&var_name) {
-                Some(ty) => wrap(Var(var_name), ty.clone()),
+                Some(ty) => {
+                    let mut ty = ty.clone();
+                    // Implicit conversion to a function pointer
+                    if let Type::Func { .. } = ty.0 {
+                        ty = Type::Ptr(Box::new(ty)).into();
+                    }
+                    wrap(Var(var_name), ty)
+                }
                 None => {
                     return Err(Error::UndefinedVar {
                         name: var_name.clone(),
@@ -494,17 +502,22 @@ impl TypeChecker {
                 let arg_ty: Vec<ResolvedType> = typed_args.iter().map(|e| e.ty.clone()).collect();
 
                 match func.ty.clone().0 {
-                    Type::FuncPtr { params, ret_ty } => {
-                        if params == arg_ty {
-                            let call = Call {
-                                func,
-                                args: typed_args,
-                            };
-                            wrap(call, *ret_ty)
-                        } else {
-                            todo!("type mismatch in function argument")
+                    Type::Ptr(inner) => match inner.0 {
+                        Type::Func { params, ret_ty } => {
+                            if params == arg_ty {
+                                let call = Call {
+                                    func,
+                                    args: typed_args,
+                                };
+                                wrap(call, *ret_ty)
+                            } else {
+                                todo!("type mismatch in function argument")
+                            }
                         }
-                    }
+                        _ => {
+                            todo!("not a callable type")
+                        }
+                    },
                     _ => {
                         todo!("not a callable type")
                     }

@@ -171,7 +171,8 @@ peg::parser! { pub grammar parser() for [Token] {
         = [Fun] [LParen] params:(ty() ** [Comma]) [RParen] [Arrow] ret_ty:ty()
         {
             let params = params.into_iter().map(|bx| *bx).collect();
-            ParsedType::Known(Type::FuncPtr { params, ret_ty }).into()
+            let func = ParsedType::Known(Type::Func { params, ret_ty });
+            ParsedType::Known(Type::Ptr(func.into())).into()
         }
 
     // expression
