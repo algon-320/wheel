@@ -89,11 +89,10 @@ impl std::fmt::Debug for BasicBlock {
 
 #[derive(Debug, Clone, Copy)]
 enum Addr {
-    Function(PointerId),
     BpRel(i64),
-    Data(PointerId),
+    Static(PointerId),
     ArrayBpRel(i64),
-    ArrayData(PointerId),
+    ArrayStatic(PointerId),
 }
 
 struct FunctionContext {
@@ -126,9 +125,18 @@ struct LoopContext {
 }
 
 struct Scope {
-    dict: HashMap<String, Addr>,
-    size: u64,
+    dict: HashMap<String, (Addr, ResolvedType)>,
 }
+impl Scope {
+    fn size(&self) -> u64 {
+        let mut sum = 0;
+        for (_, ty) in self.dict.values() {
+            sum += ty.size_of();
+        }
+        sum
+    }
+}
+
 struct Environment {
     scopes: Stack<Scope>,
 }
@@ -142,7 +150,6 @@ impl Environment {
     pub fn create_new_scope(&mut self) {
         self.scopes.push(Scope {
             dict: HashMap::new(),
-            size: 0,
         });
     }
     pub fn pop_scope(&mut self) -> Option<Scope> {
@@ -150,20 +157,18 @@ impl Environment {
         Some(scope)
     }
 
-    pub fn insert(&mut self, name: String, addr: Addr, size: u64) {
+    pub fn insert(&mut self, name: String, addr: Addr, ty: ResolvedType) {
         let scope = &mut self.scopes.last_mut().unwrap();
-        scope.size += size;
-
-        let old = scope.dict.insert(name.clone(), addr);
+        let old = scope.dict.insert(name.clone(), (addr, ty));
         if old.is_some() {
             log::warn!("variable shadowed: {}", name);
         }
     }
 
-    pub fn get(&self, var_name: &str) -> Option<Addr> {
+    pub fn get(&self, var_name: &str) -> Option<(Addr, &ResolvedType)> {
         for scope in self.scopes.iter().rev() {
-            if let Some(&addr) = scope.dict.get(var_name) {
-                return Some(addr);
+            if let Some((addr, ty)) = scope.dict.get(var_name) {
+                return Some((*addr, ty));
             }
         }
         None
@@ -543,11 +548,11 @@ impl Compiler {
 
         let data_location = self.new_pointer();
         let addr = if ty.is_array() {
-            Addr::ArrayData(data_location)
+            Addr::ArrayStatic(data_location)
         } else {
-            Addr::Data(data_location)
+            Addr::Static(data_location)
         };
-        self.env.insert(data.name, addr, ty.size_of() as u64);
+        self.env.insert(data.name, addr, ty.clone());
 
         let old_bb = self.emit_bb;
 
@@ -583,7 +588,12 @@ impl Compiler {
         let (func_bb, func_addr) = self.new_block();
         self.set_insertion_point(func_bb);
 
-        self.env.insert(fun.name, Addr::Function(func_addr), 0);
+        let addr = Addr::Static(func_addr);
+        let func_ty = Type::Func {
+            params: fun.params.iter().map(|f| f.ty.clone()).collect(),
+            ret_ty: fun.ret_ty.clone().into(),
+        };
+        self.env.insert(fun.name, addr, func_ty.into());
 
         //----------------------------------------------------------------------
         // create a scope for parameter
@@ -597,9 +607,8 @@ impl Compiler {
                 Addr::BpRel(offset)
             };
 
-            let size = p.ty.size_of() as u64;
-            self.env.insert(p.name.clone(), addr, size);
-            offset += size as i64;
+            self.env.insert(p.name.clone(), addr, p.ty.clone());
+            offset += p.ty.size_of() as i64;
         }
 
         self.func_ctx = Some(FunctionContext::new());
@@ -736,17 +745,55 @@ impl Compiler {
 
             Var(_) if expr_ty.size_of() == 0 => {}
             Var(name) => {
-                match self.env.get(&name) {
-                    Some(addr) => match addr {
-                        Addr::Data(location) => {
-                            self.emit(I::Lit64);
-                            self.emit(Ir::Pointer(location));
-                            if expr_cat == Category::Regular {
-                                self.generate_load(expr_ty.size_of());
+                let (addr, var_ty) = match self.env.get(&name) {
+                    Some((addr, var_ty)) => (addr, var_ty.clone()),
+                    None => return Err(Error::UndefinedVar { name }),
+                };
+
+                match addr {
+                    Addr::Static(location) => {
+                        self.emit(I::Lit64);
+                        self.emit(Ir::Pointer(location));
+
+                        match var_ty.0 {
+                            Type::Func { .. } => {
+                                // If the variable represents a function,
+                                // We treat it as a pointer to the function.
+                                // That is, no loading from `location` needed in this case.
+                            }
+                            _ => {
+                                if expr_cat == Category::Regular {
+                                    self.generate_load(expr_ty.size_of());
+                                }
                             }
                         }
+                    }
 
-                        Addr::BpRel(offset) => {
+                    Addr::BpRel(offset) => {
+                        self.emit(I::GetBp);
+                        self.emit(I::Lit64);
+                        self.emit(offset.abs() as u64);
+                        if offset > 0 {
+                            self.emit(I::Add64); // function argument
+                        } else {
+                            self.emit(I::Sub64); // local variable
+                        }
+                        if expr_cat == Category::Regular {
+                            self.generate_load(expr_ty.size_of());
+                        }
+                    }
+
+                    Addr::ArrayStatic(location) => {
+                        if expr_cat == Category::Regular {
+                            self.emit(I::Lit64);
+                            self.emit(Ir::Pointer(location));
+                        } else {
+                            todo!("array itself cannot be a location expression");
+                        }
+                    }
+
+                    Addr::ArrayBpRel(offset) => {
+                        if expr_cat == Category::Regular {
                             self.emit(I::GetBp);
                             self.emit(I::Lit64);
                             self.emit(offset.abs() as u64);
@@ -755,46 +802,9 @@ impl Compiler {
                             } else {
                                 self.emit(I::Sub64); // local variable
                             }
-                            if expr_cat == Category::Regular {
-                                self.generate_load(expr_ty.size_of());
-                            }
+                        } else {
+                            todo!("array itself cannot be a location expression");
                         }
-
-                        Addr::ArrayData(location) => {
-                            if expr_cat == Category::Regular {
-                                self.emit(I::Lit64);
-                                self.emit(Ir::Pointer(location));
-                            } else {
-                                todo!("array itself cannot be a location expression");
-                            }
-                        }
-
-                        Addr::ArrayBpRel(offset) => {
-                            if expr_cat == Category::Regular {
-                                self.emit(I::GetBp);
-                                self.emit(I::Lit64);
-                                self.emit(offset.abs() as u64);
-                                if offset > 0 {
-                                    self.emit(I::Add64); // function argument
-                                } else {
-                                    self.emit(I::Sub64); // local variable
-                                }
-                            } else {
-                                todo!("array itself cannot be a location expression");
-                            }
-                        }
-
-                        Addr::Function(p) => {
-                            if expr_cat == Category::Regular {
-                                self.emit(I::Lit64);
-                                self.emit(Ir::Pointer(p));
-                            } else {
-                                todo!("function cannot be a location expression");
-                            }
-                        }
-                    },
-                    None => {
-                        todo!("undefined variable");
                     }
                 }
             }
@@ -1340,7 +1350,7 @@ impl Compiler {
                 self.emit(Ir::Pointee(cont));
 
                 let scope = self.env.pop_scope().expect("scope unbalanced");
-                self.func_ctx.as_mut().unwrap().deallocate(scope.size);
+                self.func_ctx.as_mut().unwrap().deallocate(scope.size());
                 //--------------------------------------------------------------
             }
 
@@ -1382,7 +1392,7 @@ impl Compiler {
                     self.emit(I::Lit64);
                     self.emit(offset);
                     self.emit(I::Sub64);
-                    self.generate_store(var_ty.size_of());
+                    self.generate_store(var_size);
                 }
 
                 let addr = if var_ty.is_array() {
@@ -1390,7 +1400,7 @@ impl Compiler {
                 } else {
                     Addr::BpRel(-(offset as i64))
                 };
-                self.env.insert(name, addr, var_size);
+                self.env.insert(name, addr, var_ty);
             }
 
             Assignment { location, value } => {
@@ -1500,7 +1510,7 @@ impl Compiler {
                 }
 
                 let scope = self.env.pop_scope().expect("scope unbalanced");
-                self.func_ctx.as_mut().unwrap().deallocate(scope.size);
+                self.func_ctx.as_mut().unwrap().deallocate(scope.size());
                 //--------------------------------------------------------------
             }
         }
