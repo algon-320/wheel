@@ -91,8 +91,6 @@ impl std::fmt::Debug for BasicBlock {
 enum Addr {
     BpRel(i64),
     Static(PointerId),
-    ArrayBpRel(i64),
-    ArrayStatic(PointerId),
 }
 
 struct FunctionContext {
@@ -547,11 +545,7 @@ impl Compiler {
         })?;
 
         let data_location = self.new_pointer();
-        let addr = if ty.is_array() {
-            Addr::ArrayStatic(data_location)
-        } else {
-            Addr::Static(data_location)
-        };
+        let addr = Addr::Static(data_location);
         self.env.insert(data.name, addr, ty.clone());
 
         let old_bb = self.emit_bb;
@@ -601,12 +595,7 @@ impl Compiler {
 
         let mut offset = 16; // return IP + caller BP
         for p in fun.params.iter() {
-            let addr = if p.ty.is_array() {
-                Addr::ArrayBpRel(offset)
-            } else {
-                Addr::BpRel(offset)
-            };
-
+            let addr = Addr::BpRel(offset);
             self.env.insert(p.name.clone(), addr, p.ty.clone());
             offset += p.ty.size_of() as i64;
         }
@@ -760,6 +749,21 @@ impl Compiler {
                                 // If the variable represents a function,
                                 // We treat it as a pointer to the function.
                                 // That is, no loading from `location` needed in this case.
+                                assert_eq!(
+                                    expr_cat,
+                                    Category::Regular,
+                                    "function is not a location expression"
+                                );
+                            }
+                            Type::Array(_, _) => {
+                                // If the variable represents a array,
+                                // We treat it as a pointer to the first element.
+                                // That is, no loading from `location` needed in this case.
+                                assert_eq!(
+                                    expr_cat,
+                                    Category::Regular,
+                                    "array is not a location expression"
+                                );
                             }
                             _ => {
                                 if expr_cat == Category::Regular {
@@ -778,32 +782,26 @@ impl Compiler {
                         } else {
                             self.emit(I::Sub64); // local variable
                         }
-                        if expr_cat == Category::Regular {
-                            self.generate_load(expr_ty.size_of());
-                        }
-                    }
 
-                    Addr::ArrayStatic(location) => {
-                        if expr_cat == Category::Regular {
-                            self.emit(I::Lit64);
-                            self.emit(Ir::Pointer(location));
-                        } else {
-                            todo!("array itself cannot be a location expression");
-                        }
-                    }
+                        match var_ty.0 {
+                            Type::Func { .. } => unimplemented!("function on the stack"),
 
-                    Addr::ArrayBpRel(offset) => {
-                        if expr_cat == Category::Regular {
-                            self.emit(I::GetBp);
-                            self.emit(I::Lit64);
-                            self.emit(offset.abs() as u64);
-                            if offset > 0 {
-                                self.emit(I::Add64); // function argument
-                            } else {
-                                self.emit(I::Sub64); // local variable
+                            Type::Array(_, _) => {
+                                // If the variable represents a array,
+                                // We treat it as a pointer to the first element.
+                                // That is, no loading from `location` needed in this case.
+                                assert_eq!(
+                                    expr_cat,
+                                    Category::Regular,
+                                    "array is not a location expression"
+                                );
                             }
-                        } else {
-                            todo!("array itself cannot be a location expression");
+
+                            _ => {
+                                if expr_cat == Category::Regular {
+                                    self.generate_load(expr_ty.size_of());
+                                }
+                            }
                         }
                     }
                 }
@@ -1395,11 +1393,7 @@ impl Compiler {
                     self.generate_store(var_size);
                 }
 
-                let addr = if var_ty.is_array() {
-                    Addr::ArrayBpRel(-(offset as i64))
-                } else {
-                    Addr::BpRel(-(offset as i64))
-                };
+                let addr = Addr::BpRel(-(offset as i64));
                 self.env.insert(name, addr, var_ty);
             }
 

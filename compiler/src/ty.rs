@@ -231,12 +231,6 @@ impl TypeChecker {
         let initializer = self.type_expr(initializer, Category::Regular)?;
         assert_type_eq(&initializer.ty, &ty)?;
 
-        let mut ty = ty;
-        // Implicit conversion: [T; _] -> *T
-        if let Type::Array(e, _) = ty.0 {
-            ty = Type::Ptr(e).into();
-        }
-
         self.env.insert(name.clone(), ty.clone());
 
         Ok(DataDef {
@@ -278,13 +272,7 @@ impl TypeChecker {
         self.env.create_new_scope();
 
         for p in params.iter() {
-            let mut ty = p.ty.clone();
-            // Implicit conversion: [T; _] -> *T
-            if let Type::Array(e, _) = ty.0 {
-                ty = Type::Ptr(e).into();
-            }
-
-            self.env.insert(p.name.clone(), ty);
+            self.env.insert(p.name.clone(), p.ty.clone());
         }
 
         let body = self.type_expr(body, Category::Regular)?;
@@ -376,12 +364,17 @@ impl TypeChecker {
 
             Var(var_name) => match self.env.get(&var_name) {
                 Some(ty) => {
-                    let mut ty = ty.clone();
-                    // Implicit conversion to a function pointer
-                    if let Type::Func { .. } = ty.0 {
-                        ty = Type::Ptr(Box::new(ty)).into();
-                    }
-                    wrap(Var(var_name), ty)
+                    let ty = ty.clone();
+                    let ty = match ty.0 {
+                        // Implicit conversion to a function pointer
+                        Type::Func { .. } => Type::Ptr(Box::new(ty)),
+
+                        // Implicit conversion to a pointer to the first element
+                        Type::Array(elem, _) => Type::Ptr(elem),
+
+                        ty => ty,
+                    };
+                    wrap(Var(var_name), ty.into())
                 }
                 None => {
                     return Err(Error::UndefinedVar {
@@ -427,6 +420,7 @@ impl TypeChecker {
                     _ => todo!("member access for non-struct value"),
                 };
                 let def = &self.struct_def[&struct_name];
+
                 let field_ty = def
                     .fields
                     .iter()
@@ -436,7 +430,17 @@ impl TypeChecker {
                         struct_name: struct_name.clone(),
                         field_name: field.clone(),
                     })?;
-                wrap(MemberAccess { obj, field }, field_ty)
+
+                let field_ty = match field_ty.0 {
+                    Type::Func { .. } => unreachable!(),
+
+                    // Implicit conversion to a pointer to the first element
+                    Type::Array(elem, _) => Type::Ptr(elem),
+
+                    ty => ty,
+                };
+
+                wrap(MemberAccess { obj, field }, field_ty.into())
             }
 
             Add(_, _) | Sub(_, _) | Mul(_, _) | Div(_, _) => {
@@ -608,13 +612,7 @@ impl TypeChecker {
 
             Let { name, value } => {
                 let value = self.type_expr(value, Category::Regular)?;
-
-                let mut ty = value.ty.clone();
-                // Implicit conversion: [T; _] -> *T
-                if let Type::Array(e, _) = ty.0 {
-                    ty = Type::Ptr(e).into();
-                }
-                self.env.insert(name.clone(), ty);
+                self.env.insert(name.clone(), value.ty.clone());
 
                 wrap(Let { name, value }, Type::Void.into())
             }
