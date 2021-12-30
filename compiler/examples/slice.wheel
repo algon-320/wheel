@@ -1,0 +1,40 @@
+struct Foo {
+    a: [u64; 3],
+}
+
+fn array() -> [u64; 3] {
+    [1, 2, 3]
+}
+
+fn first(s: *[u64]) -> u64 {
+    s[0]
+}
+
+fn decimal(digits: *[u64]) -> u64 {
+    let len = digits.len;
+    let sum = 0;
+    let p = 1;
+    for let i = 0; i < len; i += 1 {
+        sum += digits[len - 1 - i] * p;
+        p *= 10;
+    }
+    sum
+}
+
+fn main() -> u64 {
+    let i = 1;
+
+    let a = array();
+    let s1 = &a[0..3];     // slice from array
+    let s2 = [@ &a[0]; 3]; // slice from pointer
+    let foo = Foo { a: array() };
+
+    let res = [
+        a[i],
+        s1[i],
+        s2[i],
+        foo.a[i],
+        array()[i],
+    ];
+    decimal(&res[0..5])
+}

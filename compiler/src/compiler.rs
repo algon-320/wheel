@@ -199,6 +199,14 @@ impl Compiler {
         let mut env = Environment::new();
         env.create_new_scope();
 
+        let mut struct_layout = HashMap::new();
+        struct_layout.insert("internal.slice".to_owned(), {
+            let mut layout = StructLayout::new();
+            layout.insert("ptr".to_owned(), 0);
+            layout.insert("len".to_owned(), 8);
+            layout
+        });
+
         let mut c = Self {
             debug,
 
@@ -211,7 +219,7 @@ impl Compiler {
             static_data_bb: BlockId(0),
 
             env,
-            struct_layout: HashMap::new(),
+            struct_layout,
             func_ctx: None,
             loop_ctx: Stack::new(),
         };
@@ -703,6 +711,36 @@ impl Compiler {
                 }
             }
 
+            LiteralSliceFromPtr { ptr, size } => {
+                self.compile_expr(size)?;
+                self.compile_expr(ptr)?;
+            }
+
+            LiteralSliceFromArray {
+                mut array,
+                begin,
+                end,
+            } => {
+                let elem_ty = match &array.ty.0 {
+                    Type::Array(elem_ty, _) => elem_ty.clone(),
+                    _ => unreachable!(),
+                };
+
+                // size: end - begin
+                self.compile_expr(end)?;
+                self.compile_expr(begin.clone())?;
+                self.emit(I::Sub64);
+
+                array.cat = Category::Location;
+                self.compile_expr(array)?;
+
+                self.compile_expr(begin)?;
+                self.emit(I::Lit64);
+                self.emit(elem_ty.size_of());
+                self.emit(I::Mul64);
+                self.emit(I::Add64);
+            }
+
             LiteralStruct {
                 name: struct_name,
                 fields,
@@ -755,16 +793,6 @@ impl Compiler {
                                     "function is not a location expression"
                                 );
                             }
-                            Type::Array(_, _) => {
-                                // If the variable represents a array,
-                                // We treat it as a pointer to the first element.
-                                // That is, no loading from `location` needed in this case.
-                                assert_eq!(
-                                    expr_cat,
-                                    Category::Regular,
-                                    "array is not a location expression"
-                                );
-                            }
                             _ => {
                                 if expr_cat == Category::Regular {
                                     self.generate_load(expr_ty.size_of());
@@ -785,18 +813,6 @@ impl Compiler {
 
                         match var_ty.0 {
                             Type::Func { .. } => unimplemented!("function on the stack"),
-
-                            Type::Array(_, _) => {
-                                // If the variable represents a array,
-                                // We treat it as a pointer to the first element.
-                                // That is, no loading from `location` needed in this case.
-                                assert_eq!(
-                                    expr_cat,
-                                    Category::Regular,
-                                    "array is not a location expression"
-                                );
-                            }
-
                             _ => {
                                 if expr_cat == Category::Regular {
                                     self.generate_load(expr_ty.size_of());
@@ -819,21 +835,81 @@ impl Compiler {
                 }
             }
 
-            ArrayAccess { ptr, idx } => {
-                self.compile_expr(ptr)?;
+            IndexAccess { ptr, idx } => match &ptr.ty.0 {
+                Type::Array(_, len) => {
+                    let elem_ty = expr_ty;
+                    let elem_size = elem_ty.size_of();
+                    let len = *len as u64;
 
-                // ptr + idx * sizeof(ty)
-                self.compile_expr(idx)?;
-                self.emit(I::Lit64);
-                self.emit(expr_ty.size_of());
-                self.emit(I::Mul64);
-                self.emit(I::Add64);
+                    self.compile_expr(ptr)?;
 
-                if expr_cat == Category::Regular {
-                    assert_ne!(expr_ty.0, Type::Void, "deref of *()");
-                    self.generate_load(expr_ty.size_of());
+                    if expr_cat == Category::Location {
+                        // SP + (idx * elem_size)
+                        self.compile_expr(idx)?;
+                        self.emit(I::Lit64);
+                        self.emit(elem_size);
+                        self.emit(I::Mul64);
+                        self.emit(I::Add64);
+                    } else {
+                        // extract the idx'th element
+
+                        // load idx'th element
+                        // SP + (idx * elem_size)
+                        self.emit(I::GetSp);
+                        self.compile_expr(idx)?;
+                        self.emit(I::Lit64);
+                        self.emit(elem_size);
+                        self.emit(I::Mul64);
+                        self.emit(I::Add64);
+                        self.generate_load(elem_size);
+
+                        // copy it to the bottom of this array
+                        // SP + (len * elem_size)
+                        self.emit(I::GetSp);
+                        self.emit(I::Lit64);
+                        self.emit(len); // (len - elem) + elem
+                        self.emit(I::Lit64);
+                        self.emit(elem_size);
+                        self.emit(I::Mul64);
+                        self.emit(I::Add64);
+                        self.generate_store(elem_size);
+
+                        // discard other values
+                        self.generate_drop((len - 1) * elem_size);
+                    }
                 }
-            }
+
+                Type::Slice(_) => {
+                    self.compile_expr(ptr)?;
+
+                    if expr_cat == Category::Location {
+                        self.emit(I::Load64); // load ptr
+                        self.compile_expr(idx)?;
+                        self.emit(I::Lit64);
+                        self.emit(expr_ty.size_of());
+                        self.emit(I::Mul64);
+                        self.emit(I::Add64);
+                    } else {
+                        // slice.ptr
+                        self.emit(I::GetSp);
+                        self.emit(I::Lit64);
+                        self.emit(8_u64);
+                        self.emit(I::Add64);
+                        self.emit(I::Store64);
+
+                        // ptr + idx * sizeof(ty)
+                        self.compile_expr(idx)?;
+                        self.emit(I::Lit64);
+                        self.emit(expr_ty.size_of());
+                        self.emit(I::Mul64);
+                        self.emit(I::Add64);
+
+                        self.generate_load(expr_ty.size_of());
+                    }
+                }
+
+                _ => unreachable!("type error"),
+            },
 
             MemberAccess { obj, field } => {
                 let obj_ty = obj.ty.clone();
@@ -844,6 +920,7 @@ impl Compiler {
 
                 let layout = match &obj_ty.0 {
                     Type::Struct { name, .. } => &self.struct_layout[name],
+                    Type::Slice(_) => &self.struct_layout["internal.slice"],
                     _ => todo!("member access for non-struct value"),
                 };
                 let offset = layout[&field];
@@ -852,7 +929,7 @@ impl Compiler {
                     self.emit(I::Lit64);
                     self.emit(offset);
                     self.emit(I::Add64);
-                } else if obj_cat == Category::Regular {
+                } else {
                     assert_eq!(expr_cat, Category::Regular);
                     let size = expr_ty.size_of();
 
@@ -911,6 +988,7 @@ impl Compiler {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
+                    | Type::Slice { .. }
                     | Type::Struct { .. }
                     | Type::Ptr(_) => todo!(),
                     Type::U64 => self.emit(I::Add64),
@@ -924,6 +1002,7 @@ impl Compiler {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
+                    | Type::Slice { .. }
                     | Type::Struct { .. }
                     | Type::Ptr(_) => todo!(),
                     Type::U64 => self.emit(I::Sub64),
@@ -937,6 +1016,7 @@ impl Compiler {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
+                    | Type::Slice { .. }
                     | Type::Struct { .. }
                     | Type::Ptr(_) => todo!(),
                     Type::U64 => self.emit(I::Mul64),
@@ -950,6 +1030,7 @@ impl Compiler {
                     Type::Void
                     | Type::Bool
                     | Type::Array(_, _)
+                    | Type::Slice { .. }
                     | Type::Struct { .. }
                     | Type::Ptr(_) => todo!(),
                     Type::U64 => self.emit(I::Div64),
@@ -969,6 +1050,7 @@ impl Compiler {
                     }
                     Type::Bool => self.emit(I::Eq08),
                     Type::Array(_, _) => todo!("array comparison"),
+                    Type::Slice { .. } => todo!("slice comparison"),
                     Type::Struct { .. } => todo!("struct comparison"),
                     Type::U64 | Type::Ptr(_) => self.emit(I::Eq64),
                     Type::Func { .. } => unimplemented!(),
@@ -982,6 +1064,7 @@ impl Compiler {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Lt08),
                     Type::Array(_, _) => todo!("array comparison"),
+                    Type::Slice { .. } => todo!("slice comparison"),
                     Type::Struct { .. } => todo!("struct comparison"),
                     Type::U64 | Type::Ptr(_) => self.emit(I::Lt64),
                     Type::Func { .. } => unimplemented!(),
@@ -995,6 +1078,7 @@ impl Compiler {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Gt08),
                     Type::Array(_, _) => todo!("array comparison"),
+                    Type::Slice { .. } => todo!("slice comparison"),
                     Type::Struct { .. } => todo!("struct comparison"),
                     Type::U64 | Type::Ptr(_) => self.emit(I::Gt64),
                     Type::Func { .. } => unimplemented!(),
@@ -1105,7 +1189,7 @@ impl Compiler {
                         self.emit(I::Lit64);
                         self.emit(0xFFFF_FFFF_FFFF_FFFF_u64);
                     }
-                    Type::Struct { .. } | Type::Array(_, _) => {
+                    Type::Struct { .. } | Type::Array(_, _) | Type::Slice { .. } => {
                         let size = ret_ty.size_of();
                         for _ in 0..size {
                             self.emit(I::Lit08);
@@ -1168,14 +1252,8 @@ impl Compiler {
 
                 // drop arguments
                 for ty in params_ty.iter() {
-                    match ty.0 {
-                        Type::Void => {}
-                        Type::Bool => self.emit(I::Drop08),
-                        Type::U64 | Type::Ptr(_) => self.emit(I::Drop64),
-                        Type::Struct { .. } | Type::Array(_, _) => {
-                            self.generate_drop(ty.size_of());
-                        }
-                        Type::Func { .. } => unreachable!(),
+                    if ty.size_of() > 0 {
+                        self.generate_drop(ty.size_of());
                     }
                 }
             }
@@ -1490,16 +1568,8 @@ impl Compiler {
                 for (i, e) in exprs.into_iter().enumerate() {
                     let ty = e.ty.clone();
                     self.compile_expr(e)?;
-                    if i + 1 < len {
-                        match ty.0 {
-                            Type::Void => {}
-                            Type::Bool => self.emit(I::Drop08),
-                            Type::U64 | Type::Ptr(_) => self.emit(I::Drop64),
-                            Type::Struct { .. } | Type::Array(_, _) => {
-                                self.generate_drop(ty.size_of());
-                            }
-                            Type::Func { .. } => unimplemented!(),
-                        }
+                    if i + 1 < len && ty.size_of() > 0 {
+                        self.generate_drop(ty.size_of());
                     }
                 }
 

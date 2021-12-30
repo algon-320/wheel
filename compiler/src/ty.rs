@@ -11,6 +11,7 @@ pub enum Type<T: TypeBound> {
     U64,
     Array(Box<T>, usize),
     Ptr(Box<T>),
+    Slice(Box<T>),
     Func { params: Vec<T>, ret_ty: Box<T> },
     Struct { name: String, fields: Vec<T> },
 }
@@ -26,9 +27,10 @@ impl ResolvedType {
             Type::Bool => 1,
             Type::U64 => 8,
             Type::Array(elem, len) => elem.size_of() * (*len as u64),
-            Type::Struct { fields, .. } => fields.iter().fold(0_u64, |a, f| a + f.size_of()),
             Type::Ptr(_) => 8,
+            Type::Slice(_) => 16, // ptr + size
             Type::Func { .. } => unimplemented!("function size"),
+            Type::Struct { fields, .. } => fields.iter().fold(0_u64, |a, f| a + f.size_of()),
         }
     }
 
@@ -137,9 +139,14 @@ impl TypeChecker {
                         ResolvedType(Type::Array(Box::new(elem_ty), len))
                     }
 
+                    Type::Slice(elem_ty) => {
+                        let elem_ty = self.resolve(*elem_ty)?;
+                        ResolvedType(Type::Slice(Box::new(elem_ty)))
+                    }
+
                     Type::Ptr(inner) => {
                         let inner = self.resolve(*inner)?;
-                        ResolvedType(Type::Ptr(inner.into()))
+                        ResolvedType(Type::Ptr(Box::new(inner)))
                     }
 
                     Type::Func { params, ret_ty } => {
@@ -293,7 +300,7 @@ impl TypeChecker {
     fn type_expr(&mut self, expr: Box<ParsedExpr>, cat: Category) -> Result<Box<TypedExpr>, Error> {
         // verify category
         match &expr.e {
-            Var(_) | PtrDeref(_) | ArrayAccess { .. } | MemberAccess { .. } => {}
+            Var(_) | PtrDeref(_) | IndexAccess { .. } | MemberAccess { .. } => {}
             _ => {
                 if cat == Category::Location {
                     return Err(Error::CategoryMismatch);
@@ -322,6 +329,34 @@ impl TypeChecker {
 
                 let ty = Type::Array(elem_ty.into(), typed_elems.len());
                 wrap(LiteralArray(typed_elems), ty.into())
+            }
+
+            LiteralSliceFromPtr { ptr, size } => {
+                let ptr = self.type_expr(ptr, Category::Regular)?;
+                let size = self.type_expr(size, Category::Regular)?;
+                assert_type_eq(&size.ty, &ResolvedType(Type::U64))?;
+
+                let ty = if let Type::Ptr(inner) = ptr.ty.clone().0 {
+                    Type::Slice(inner)
+                } else {
+                    todo!("expected a pointer but {:?}", ptr.ty.0);
+                };
+                wrap(LiteralSliceFromPtr { ptr, size }, ty.into())
+            }
+
+            LiteralSliceFromArray { array, begin, end } => {
+                let array = self.type_expr(array, Category::Location)?;
+                let begin = self.type_expr(begin, Category::Regular)?;
+                let end = self.type_expr(end, Category::Regular)?;
+                assert_type_eq(&begin.ty, &ResolvedType(Type::U64))?;
+                assert_type_eq(&end.ty, &ResolvedType(Type::U64))?;
+
+                let ty = if let Type::Array(elem_ty, _) = array.ty.clone().0 {
+                    Type::Slice(elem_ty)
+                } else {
+                    todo!("expected an array but {:?}", array.ty.0);
+                };
+                wrap(LiteralSliceFromArray { array, begin, end }, ty.into())
             }
 
             LiteralStruct { name, fields } => {
@@ -368,10 +403,6 @@ impl TypeChecker {
                     let ty = match ty.0 {
                         // Implicit conversion to a function pointer
                         Type::Func { .. } => Type::Ptr(Box::new(ty)),
-
-                        // Implicit conversion to a pointer to the first element
-                        Type::Array(elem, _) => Type::Ptr(elem),
-
                         ty => ty,
                     };
                     wrap(Var(var_name), ty.into())
@@ -400,47 +431,62 @@ impl TypeChecker {
                 }
             }
 
-            ArrayAccess { ptr, idx } => {
-                let ptr = self.type_expr(ptr, Category::Regular)?;
+            IndexAccess { ptr, idx } => {
+                let ptr = self.type_expr(ptr, cat)?;
                 let idx = self.type_expr(idx, Category::Regular)?;
                 assert_type_eq(&idx.ty, &ResolvedType(Type::U64))?;
 
-                if let Type::Ptr(inner) = &ptr.ty.0 {
-                    let ty = *inner.clone();
-                    wrap(ArrayAccess { ptr, idx }, ty)
-                } else {
-                    todo!("index access for non-array type: {:?}", ptr.ty);
+                match &ptr.ty.0 {
+                    Type::Array(elem_ty, _) | Type::Slice(elem_ty) => {
+                        let ty = *elem_ty.clone();
+                        wrap(IndexAccess { ptr, idx }, ty)
+                    }
+                    ty => {
+                        todo!("index access for other than array or slice: {:?}", ty);
+                    }
                 }
             }
 
             MemberAccess { obj, field } => {
                 let obj = self.type_expr(obj, cat)?;
-                let struct_name = match &obj.ty.0 {
-                    Type::Struct { name, .. } => name.clone(),
+                match &obj.ty.0 {
+                    Type::Struct { name, .. } => {
+                        let def = &self.struct_def[name];
+
+                        let field_ty = def
+                            .fields
+                            .iter()
+                            .find(|f| f.name == field)
+                            .map(|f| f.ty.clone())
+                            .ok_or_else(|| Error::UndefinedField {
+                                struct_name: name.clone(),
+                                field_name: field.clone(),
+                            })?;
+
+                        let field_ty = match field_ty.0 {
+                            Type::Func { .. } => unreachable!(),
+                            ty => ty,
+                        };
+
+                        wrap(MemberAccess { obj, field }, field_ty.into())
+                    }
+
+                    Type::Slice(elem_ty) => {
+                        let field_ty = match field.as_str() {
+                            "ptr" => Type::Ptr(elem_ty.clone()),
+                            "len" => Type::U64,
+                            _ => {
+                                return Err(Error::UndefinedField {
+                                    struct_name: "primitive.slice".to_owned(),
+                                    field_name: field,
+                                });
+                            }
+                        };
+                        wrap(MemberAccess { obj, field }, field_ty.into())
+                    }
+
                     _ => todo!("member access for non-struct value"),
-                };
-                let def = &self.struct_def[&struct_name];
-
-                let field_ty = def
-                    .fields
-                    .iter()
-                    .find(|f| f.name == field)
-                    .map(|f| f.ty.clone())
-                    .ok_or_else(|| Error::UndefinedField {
-                        struct_name: struct_name.clone(),
-                        field_name: field.clone(),
-                    })?;
-
-                let field_ty = match field_ty.0 {
-                    Type::Func { .. } => unreachable!(),
-
-                    // Implicit conversion to a pointer to the first element
-                    Type::Array(elem, _) => Type::Ptr(elem),
-
-                    ty => ty,
-                };
-
-                wrap(MemberAccess { obj, field }, field_ty.into())
+                }
             }
 
             Add(_, _) | Sub(_, _) | Mul(_, _) | Div(_, _) => {

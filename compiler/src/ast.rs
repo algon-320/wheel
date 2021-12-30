@@ -47,6 +47,15 @@ pub enum Expr<E: ExprBound> {
     LiteralBool(bool),
     LiteralU64(u64),
     LiteralArray(Vec<Box<E>>),
+    LiteralSliceFromPtr {
+        ptr: Box<E>,
+        size: Box<E>,
+    },
+    LiteralSliceFromArray {
+        array: Box<E>,
+        begin: Box<E>,
+        end: Box<E>,
+    },
     LiteralStruct {
         name: String,
         fields: Vec<(String, Box<E>)>,
@@ -56,7 +65,7 @@ pub enum Expr<E: ExprBound> {
 
     Var(String),
     PtrDeref(Box<E>),
-    ArrayAccess {
+    IndexAccess {
         ptr: Box<E>,
         idx: Box<E>,
     },

@@ -30,6 +30,7 @@ pub enum Token {
     Minus,
     Star,
     Slash,
+    At,
     Dot,
     Colon,
     SemiColon,
@@ -67,7 +68,7 @@ peg::parser! { grammar tokenizer() for str {
             break_() / continue_() /
             let_() / in_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
-            dot() / colon() / semicolon() / comma() / equal() / lt() / gt() /
+            at() / dot() / colon() / semicolon() / comma() / equal() / lt() / gt() /
             and() / pipe() / bang() / ident() / number()
           ) end:position!()
           (ws() / comment())*
@@ -98,6 +99,7 @@ peg::parser! { grammar tokenizer() for str {
     rule minus() -> Token = "-" { Token::Minus }
     rule star() -> Token = "*" { Token::Star }
     rule slash() -> Token = "/" { Token::Slash }
+    rule at() -> Token = "@" { Token::At }
     rule dot() -> Token = "." { Token::Dot }
     rule colon() -> Token = ":" { Token::Colon }
     rule semicolon() -> Token = ";" { Token::SemiColon }
@@ -154,7 +156,7 @@ peg::parser! { pub grammar parser() for [Token] {
                 name => Ok(ParsedType::UserDefined(ty).into()),
             }
         }
-        / array_ty() / ptr_ty() / func_ptr_ty()
+        / array_ty() / slice_ty() / ptr_ty() / func_ptr_ty()
 
 
     rule array_ty() -> Box<ParsedType>
@@ -163,6 +165,10 @@ peg::parser! { pub grammar parser() for [Token] {
             let len: usize = len.parse().or(Err("integer too large"))?;
             Ok(ParsedType::Known(Type::Array(ty, len)).into())
         }
+
+    rule slice_ty() -> Box<ParsedType>
+        = [Star] [LSquareBracket] ty:ty() [RSquareBracket]
+        { ParsedType::Known(Type::Slice(ty)).into() }
 
     rule ptr_ty() -> Box<ParsedType>
         = [Star] ty:ty() { ParsedType::Known(Type::Ptr(ty)).into() }
@@ -209,11 +215,13 @@ peg::parser! { pub grammar parser() for [Token] {
             l:(@) [Star]  r:@         { wrap(Expr::Mul(l, r)) }
             l:(@) [Slash] r:@         { wrap(Expr::Div(l, r)) }
             --
+            e:literal_slice_from_array() { e }
+            --
             [Star] e:@ { wrap(Expr::PtrDeref(e)) }
             [And]  e:@ { wrap(Expr::AddrOf(e)) }
             --
             ptr:@ [LSquareBracket] idx:expr() [RSquareBracket]
-                { wrap(Expr::ArrayAccess{ ptr, idx }) }
+                { wrap(Expr::IndexAccess{ ptr, idx }) }
             --
             obj:@ [Dot] [Ident(field)] { wrap(Expr::MemberAccess { obj, field }) }
             --
@@ -237,6 +245,7 @@ peg::parser! { pub grammar parser() for [Token] {
             e:literal_void() { e }
             e:literal_u64() { e }
             e:literal_array() { e }
+            e:literal_slice_from_ptr() { e }
             e:variable() { e }
 
             [LParen] expr:expr() [RParen] { expr }
@@ -258,10 +267,16 @@ peg::parser! { pub grammar parser() for [Token] {
         }
 
     rule literal_array() -> Box<ParsedExpr>
-        = [LSquareBracket] elems:(expr() ++ [Comma]) [RSquareBracket]
-        {
-            wrap(Expr::LiteralArray(elems))
-        }
+        = [LSquareBracket] elems:(expr() ++ [Comma]) [Comma]? [RSquareBracket]
+        { wrap(Expr::LiteralArray(elems)) }
+
+    rule literal_slice_from_array() -> Box<ParsedExpr>
+        = [And] array:expr() [LSquareBracket] begin:expr() [Dot] [Dot] end:expr() [RSquareBracket]
+        { wrap(Expr::LiteralSliceFromArray { array, begin, end }) }
+
+    rule literal_slice_from_ptr() -> Box<ParsedExpr>
+        = [LSquareBracket] [At] ptr:expr() [SemiColon] size:expr() [RSquareBracket]
+        { wrap(Expr::LiteralSliceFromPtr { ptr, size }) }
 
     rule literal_struct() -> Box<ParsedExpr>
         = [Ident(name)] [LBrace] fields:(struct_field() ** [Comma]) [Comma]? [RBrace]
