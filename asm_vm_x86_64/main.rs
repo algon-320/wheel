@@ -7,7 +7,23 @@ extern "C" {
 }
 
 fn main() {
-    let layout = Layout::from_size_align(0x2000, 0x1000).expect("invalid layout");
+    let mut memsize = 0x1000;
+
+    let mut args = std::env::args();
+    args.next(); // ignore executable name
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "-m" | "--mem" => {
+                memsize = args.next().unwrap().parse::<usize>().unwrap();
+            }
+            unknown => {
+                panic!("unknown option: {:?}", unknown);
+            }
+        }
+    }
+
+    let layout = Layout::from_size_align(memsize, 0x1000).expect("invalid layout");
     assert!(layout.size() > 0);
     let mem = unsafe { alloc(layout) };
     assert!(!mem.is_null());
