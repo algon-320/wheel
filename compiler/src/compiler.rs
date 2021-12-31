@@ -700,6 +700,18 @@ impl Compiler {
                 self.emit(I::Lit08);
                 self.emit(b as u8);
             }
+            LiteralU08(v) => {
+                self.emit(I::Lit08);
+                self.emit(v);
+            }
+            LiteralU16(v) => {
+                self.emit(I::Lit16);
+                self.emit(v);
+            }
+            LiteralU32(v) => {
+                self.emit(I::Lit32);
+                self.emit(v);
+            }
             LiteralU64(v) => {
                 self.emit(I::Lit64);
                 self.emit(v);
@@ -1010,6 +1022,9 @@ impl Compiler {
                     | Type::Slice { .. }
                     | Type::Struct { .. }
                     | Type::Ptr(_) => todo!(),
+                    Type::U08 => self.emit(I::Add08),
+                    Type::U16 => self.emit(I::Add16),
+                    Type::U32 => self.emit(I::Add32),
                     Type::U64 => self.emit(I::Add64),
                     Type::Func { .. } => unimplemented!(),
                 }
@@ -1024,6 +1039,9 @@ impl Compiler {
                     | Type::Slice { .. }
                     | Type::Struct { .. }
                     | Type::Ptr(_) => todo!(),
+                    Type::U08 => self.emit(I::Sub08),
+                    Type::U16 => self.emit(I::Sub16),
+                    Type::U32 => self.emit(I::Sub32),
                     Type::U64 => self.emit(I::Sub64),
                     Type::Func { .. } => unimplemented!(),
                 }
@@ -1038,6 +1056,9 @@ impl Compiler {
                     | Type::Slice { .. }
                     | Type::Struct { .. }
                     | Type::Ptr(_) => todo!(),
+                    Type::U08 => self.emit(I::Mul08),
+                    Type::U16 => self.emit(I::Mul16),
+                    Type::U32 => self.emit(I::Mul32),
                     Type::U64 => self.emit(I::Mul64),
                     Type::Func { .. } => unimplemented!(),
                 }
@@ -1052,6 +1073,9 @@ impl Compiler {
                     | Type::Slice { .. }
                     | Type::Struct { .. }
                     | Type::Ptr(_) => todo!(),
+                    Type::U08 => self.emit(I::Div08),
+                    Type::U16 => self.emit(I::Div16),
+                    Type::U32 => self.emit(I::Div32),
                     Type::U64 => self.emit(I::Div64),
                     Type::Func { .. } => unimplemented!(),
                 }
@@ -1068,10 +1092,13 @@ impl Compiler {
                         self.emit(1_u8);
                     }
                     Type::Bool => self.emit(I::Eq08),
+                    Type::U08 => self.emit(I::Eq08),
+                    Type::U16 => self.emit(I::Eq16),
+                    Type::U32 => self.emit(I::Eq32),
+                    Type::U64 | Type::Ptr(_) => self.emit(I::Eq64),
                     Type::Array(_, _) => todo!("array comparison"),
                     Type::Slice { .. } => todo!("slice comparison"),
                     Type::Struct { .. } => todo!("struct comparison"),
-                    Type::U64 | Type::Ptr(_) => self.emit(I::Eq64),
                     Type::Func { .. } => unimplemented!(),
                 }
             }
@@ -1082,10 +1109,13 @@ impl Compiler {
                 match ty.0 {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Lt08),
+                    Type::U08 => self.emit(I::Lt08),
+                    Type::U16 => self.emit(I::Lt16),
+                    Type::U32 => self.emit(I::Lt32),
+                    Type::U64 | Type::Ptr(_) => self.emit(I::Lt64),
                     Type::Array(_, _) => todo!("array comparison"),
                     Type::Slice { .. } => todo!("slice comparison"),
                     Type::Struct { .. } => todo!("struct comparison"),
-                    Type::U64 | Type::Ptr(_) => self.emit(I::Lt64),
                     Type::Func { .. } => unimplemented!(),
                 }
             }
@@ -1096,6 +1126,9 @@ impl Compiler {
                 match ty.0 {
                     Type::Void => todo!("void comp"),
                     Type::Bool => self.emit(I::Gt08),
+                    Type::U08 => self.emit(I::Gt08),
+                    Type::U16 => self.emit(I::Gt16),
+                    Type::U32 => self.emit(I::Gt32),
                     Type::Array(_, _) => todo!("array comparison"),
                     Type::Slice { .. } => todo!("slice comparison"),
                     Type::Struct { .. } => todo!("struct comparison"),
@@ -1203,6 +1236,18 @@ impl Compiler {
                     Type::Bool => {
                         self.emit(I::Lit08);
                         self.emit(0xFF_u8);
+                    }
+                    Type::U08 => {
+                        self.emit(I::Lit08);
+                        self.emit(0xFF_u8);
+                    }
+                    Type::U16 => {
+                        self.emit(I::Lit16);
+                        self.emit(0xFFFF_u16);
+                    }
+                    Type::U32 => {
+                        self.emit(I::Lit32);
+                        self.emit(0xFFFF_FFFF_u32);
                     }
                     Type::U64 | Type::Ptr(_) => {
                         self.emit(I::Lit64);

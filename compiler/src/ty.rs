@@ -8,6 +8,9 @@ pub trait TypeBound: std::fmt::Debug + Clone + PartialEq {}
 pub enum Type<T: TypeBound> {
     Void,
     Bool,
+    U08,
+    U16,
+    U32,
     U64,
     Array(Box<T>, usize),
     Ptr(Box<T>),
@@ -25,6 +28,9 @@ impl ResolvedType {
         match &self.0 {
             Type::Void => 0,
             Type::Bool => 1,
+            Type::U08 => 1,
+            Type::U16 => 2,
+            Type::U32 => 4,
             Type::U64 => 8,
             Type::Array(elem, len) => elem.size_of() * (*len as u64),
             Type::Ptr(_) => 8,
@@ -132,6 +138,9 @@ impl TypeChecker {
                 let ty = match ty {
                     Type::Void => ResolvedType(Type::Void),
                     Type::Bool => ResolvedType(Type::Bool),
+                    Type::U08 => ResolvedType(Type::U08),
+                    Type::U16 => ResolvedType(Type::U16),
+                    Type::U32 => ResolvedType(Type::U32),
                     Type::U64 => ResolvedType(Type::U64),
 
                     Type::Array(elem_ty, len) => {
@@ -314,6 +323,9 @@ impl TypeChecker {
         let typed_expr = match expr.e {
             LiteralVoid => wrap(LiteralVoid, Type::Void.into()),
             LiteralBool(b) => wrap(LiteralBool(b), Type::Bool.into()),
+            LiteralU08(val) => wrap(LiteralU08(val), Type::U08.into()),
+            LiteralU16(val) => wrap(LiteralU16(val), Type::U16.into()),
+            LiteralU32(val) => wrap(LiteralU32(val), Type::U32.into()),
             LiteralU64(val) => wrap(LiteralU64(val), Type::U64.into()),
 
             LiteralArray(elems) => {
@@ -398,7 +410,7 @@ impl TypeChecker {
             }
 
             LiteralString(bytes) => {
-                let ty = Type::Slice(Box::new(Type::U64.into())); // FIXME: should be U08
+                let ty = Type::Slice(Box::new(Type::U08.into()));
                 wrap(LiteralString(bytes), ty.into())
             }
 
@@ -507,7 +519,12 @@ impl TypeChecker {
                 let rhs = self.type_expr(rhs, Category::Regular)?;
                 assert_type_eq(&lhs.ty, &rhs.ty)?;
                 let ty = lhs.ty.clone();
-                assert_type_eq(&ty, &Type::U64.into())?; // TODO: support other types
+
+                match &ty.0 {
+                    Type::U08 | Type::U16 | Type::U32 | Type::U64 => {}
+                    _ => todo!(),
+                }
+
                 wrap(ctor(lhs, rhs), ty)
             }
 
@@ -525,6 +542,12 @@ impl TypeChecker {
                 let lhs = self.type_expr(lhs, Category::Regular)?;
                 let rhs = self.type_expr(rhs, Category::Regular)?;
                 assert_type_eq(&lhs.ty, &rhs.ty)?;
+
+                match &lhs.ty.0 {
+                    Type::Bool | Type::U08 | Type::U16 | Type::U32 | Type::U64 | Type::Ptr(_) => {}
+                    _ => todo!(),
+                }
+
                 wrap(ctor(lhs, rhs), Type::Bool.into())
             }
 

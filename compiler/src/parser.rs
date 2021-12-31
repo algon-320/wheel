@@ -42,7 +42,10 @@ pub enum Token {
     Pipe,
     Bang,
     Ident(String),
-    Number(String),
+    U08(String),
+    U16(String),
+    U32(String),
+    U64(String),
     Str(String),
 }
 
@@ -70,7 +73,7 @@ peg::parser! { grammar tokenizer() for str {
             let_() / in_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
             at() / dot() / colon() / semicolon() / comma() / equal() / lt() / gt() /
-            and() / pipe() / bang() / ident() / number() / utf8_string()
+            and() / pipe() / bang() / ident() / integer() / utf8_string()
           ) end:position!()
           (ws() / comment())*
           { PosToken { t: tok, begin, end } }
@@ -119,10 +122,19 @@ peg::parser! { grammar tokenizer() for str {
         { Token::Ident(ident.to_string()) }
         / expected!("ident")
 
-    rule number() -> Token
-        = n: quiet!{$(['1'..='9']['0'..='9']* / ['0'])}
-        { Token::Number(n.to_owned()) }
-        / expected!("number")
+    rule integer() -> Token
+        = int_u08() / int_u16() / int_u32() / int_u64()
+
+    rule int_str() -> String
+        = n: quiet!{$(['1'..='9']['0'..='9']* / ['0'])} { n.to_owned() }
+        / expected!("integer")
+
+    rule int_u08() -> Token = n:int_str() ("_u8" / "_u08") { Token::U08(n) }
+    rule int_u16() -> Token = n:int_str() "_u16" { Token::U16(n) }
+    rule int_u32() -> Token = n:int_str() "_u32" { Token::U32(n) }
+    rule int_u64() -> Token
+        = n:int_str() "_u64" { Token::U64(n) }
+        / n:int_str()        { Token::U64(n) }
 
     rule utf8_string() -> Token
         = quiet!{"\"" s:(double_quoted_char()*) "\"" { Token::Str(s.into_iter().collect()) } }
@@ -166,6 +178,9 @@ peg::parser! { pub grammar parser() for [Token] {
         {?
             match ty.as_str() {
                 "bool" => Ok(ParsedType::Known(Type::Bool).into()),
+                "u8" | "u08" => Ok(ParsedType::Known(Type::U08).into()),
+                "u16" => Ok(ParsedType::Known(Type::U16).into()),
+                "u32" => Ok(ParsedType::Known(Type::U32).into()),
                 "u64" => Ok(ParsedType::Known(Type::U64).into()),
                 name => Ok(ParsedType::UserDefined(ty).into()),
             }
@@ -174,7 +189,7 @@ peg::parser! { pub grammar parser() for [Token] {
 
 
     rule array_ty() -> Box<ParsedType>
-        = [LSquareBracket] ty:ty() [SemiColon] [Number(len)] [RSquareBracket]
+        = [LSquareBracket] ty:ty() [SemiColon] [U64(len)] [RSquareBracket]
         {?
             let len: usize = len.parse().or(Err("integer too large"))?;
             Ok(ParsedType::Known(Type::Array(ty, len)).into())
@@ -257,6 +272,9 @@ peg::parser! { pub grammar parser() for [Token] {
 
             e:literal_bool() { e }
             e:literal_void() { e }
+            e:literal_u08() { e }
+            e:literal_u16() { e }
+            e:literal_u32() { e }
             e:literal_u64() { e }
             e:literal_array() { e }
             e:literal_slice_from_ptr() { e }
@@ -274,8 +292,26 @@ peg::parser! { pub grammar parser() for [Token] {
         = [True]  { wrap(Expr::LiteralBool(true)) }
         / [False] { wrap(Expr::LiteralBool(false)) }
 
+    rule literal_u08() -> Box<ParsedExpr>
+        = [U08(n)]
+        {?
+            let n = n.parse().or(Err("u08 literal: integer too large"))?;
+            Ok(wrap(Expr::LiteralU08(n)))
+        }
+    rule literal_u16() -> Box<ParsedExpr>
+        = [U16(n)]
+        {?
+            let n = n.parse().or(Err("u16 literal: integer too large"))?;
+            Ok(wrap(Expr::LiteralU16(n)))
+        }
+    rule literal_u32() -> Box<ParsedExpr>
+        = [U32(n)]
+        {?
+            let n = n.parse().or(Err("u32 literal: integer too large"))?;
+            Ok(wrap(Expr::LiteralU32(n)))
+        }
     rule literal_u64() -> Box<ParsedExpr>
-        = [Number(n)]
+        = [U64(n)]
         {?
             let n = n.parse().or(Err("u64 literal: integer too large"))?;
             Ok(wrap(Expr::LiteralU64(n)))

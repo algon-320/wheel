@@ -45,6 +45,9 @@ pub struct StructDef<T: TypeBound> {
 pub enum Expr<E: ExprBound> {
     LiteralVoid,
     LiteralBool(bool),
+    LiteralU08(u8),
+    LiteralU16(u16),
+    LiteralU32(u32),
     LiteralU64(u64),
     LiteralArray(Vec<Box<E>>),
     LiteralSliceFromPtr {
