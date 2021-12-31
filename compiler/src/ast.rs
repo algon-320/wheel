@@ -60,6 +60,7 @@ pub enum Expr<E: ExprBound> {
         name: String,
         fields: Vec<(String, Box<E>)>,
     },
+    LiteralString(Vec<u8>),
 
     AddrOf(Box<E>),
 

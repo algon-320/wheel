@@ -43,6 +43,7 @@ pub enum Token {
     Bang,
     Ident(String),
     Number(String),
+    Str(String),
 }
 
 #[derive(Debug, Clone)]
@@ -69,7 +70,7 @@ peg::parser! { grammar tokenizer() for str {
             let_() / in_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
             at() / dot() / colon() / semicolon() / comma() / equal() / lt() / gt() /
-            and() / pipe() / bang() / ident() / number()
+            and() / pipe() / bang() / ident() / number() / utf8_string()
           ) end:position!()
           (ws() / comment())*
           { PosToken { t: tok, begin, end } }
@@ -122,6 +123,19 @@ peg::parser! { grammar tokenizer() for str {
         = n: quiet!{$(['1'..='9']['0'..='9']* / ['0'])}
         { Token::Number(n.to_owned()) }
         / expected!("number")
+
+    rule utf8_string() -> Token
+        = quiet!{"\"" s:(double_quoted_char()*) "\"" { Token::Str(s.into_iter().collect()) } }
+        / expected!("UTF-8 string")
+
+    rule double_quoted_char() -> char
+        = !("\"" / "\\") c:$([_]) { c.chars().next().unwrap() }
+        / "\\\"" { '"' }
+        / "\\\\" { '\\' }
+        / "\\u{" value:$(['0'..='9' | 'a'..='f' | 'A'..='F']+) "}"         {
+            let val = u32::from_str_radix(value, 16).unwrap();
+            char::from_u32(val).unwrap()
+        }
 } }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -246,6 +260,7 @@ peg::parser! { pub grammar parser() for [Token] {
             e:literal_u64() { e }
             e:literal_array() { e }
             e:literal_slice_from_ptr() { e }
+            e:literal_string() { e }
             e:variable() { e }
 
             [LParen] expr:expr() [RParen] { expr }
@@ -277,6 +292,9 @@ peg::parser! { pub grammar parser() for [Token] {
     rule literal_slice_from_ptr() -> Box<ParsedExpr>
         = [LSquareBracket] [At] ptr:expr() [SemiColon] size:expr() [RSquareBracket]
         { wrap(Expr::LiteralSliceFromPtr { ptr, size }) }
+
+    rule literal_string() -> Box<ParsedExpr>
+        = [Str(s)] { wrap(Expr::LiteralString(s.into_bytes())) }
 
     rule literal_struct() -> Box<ParsedExpr>
         = [Ident(name)] [LBrace] fields:(struct_field() ** [Comma]) [Comma]? [RBrace]

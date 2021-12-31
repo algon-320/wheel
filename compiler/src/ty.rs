@@ -397,6 +397,11 @@ impl TypeChecker {
                 wrap(e, ty.into())
             }
 
+            LiteralString(bytes) => {
+                let ty = Type::Slice(Box::new(Type::U64.into())); // FIXME: should be U08
+                wrap(LiteralString(bytes), ty.into())
+            }
+
             Var(var_name) => match self.env.get(&var_name) {
                 Some(ty) => {
                     let ty = ty.clone();

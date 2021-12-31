@@ -770,6 +770,25 @@ impl Compiler {
                 }
             }
 
+            LiteralString(bytes) => {
+                let ptr = self.new_pointer();
+                let size = bytes.len() as u64;
+
+                let old_bb = self.emit_bb;
+                {
+                    self.set_insertion_point(self.static_data_bb);
+
+                    self.emit(Ir::Pointee(ptr));
+                    self.emit(Ir::RawBytes(bytes));
+                }
+                self.set_insertion_point(old_bb);
+
+                self.emit(I::Lit64);
+                self.emit(size);
+                self.emit(I::Lit64);
+                self.emit(Ir::Pointer(ptr));
+            }
+
             Var(_) if expr_ty.size_of() == 0 => {}
             Var(name) => {
                 let (addr, var_ty) = match self.env.get(&name) {
