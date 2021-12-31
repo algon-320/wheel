@@ -61,6 +61,7 @@ enum Token {
     U32(String, Base),
     U64(String, Base),
     Str(String),
+    Char(char),
 }
 
 #[derive(Debug, Clone)]
@@ -87,7 +88,7 @@ peg::parser! { grammar tokenizer() for str {
             let_() / in_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
             at() / dot() / colon() / semicolon() / comma() / equal() / lt() / gt() /
-            and() / pipe() / bang() / ident() / integer() / utf8_string()
+            and() / pipe() / bang() / ident() / integer() / utf8_string() / ascii_char()
           ) end:position!()
           (ws() / comment())*
           { PosToken { t: tok, begin, end } }
@@ -152,13 +153,29 @@ peg::parser! { grammar tokenizer() for str {
         = quiet!{"\"" s:(double_quoted_char()*) "\"" { Token::Str(s.into_iter().collect()) } }
         / expected!("UTF-8 string")
 
+    rule ascii_char() -> Token
+        = quiet!{ "'" c:single_quoted_char() "'" { Token::Char(c) } }
+        / expected!("character")
+
     rule double_quoted_char() -> char
         = !("\"" / "\\") c:$([_]) { c.chars().next().unwrap() }
         / "\\\"" { '"' }
         / "\\\\" { '\\' }
-        / "\\u{" value:$(['0'..='9' | 'a'..='f' | 'A'..='F']+) "}"         {
+        / "\\u{" value:$(['0'..='9' | 'a'..='f' | 'A'..='F']+) "}"
+        {
             let val = u32::from_str_radix(value, 16).unwrap();
             char::from_u32(val).unwrap()
+        }
+
+    rule single_quoted_char() -> char
+        = !("\\'" / "\\") c:$([_]) { c.chars().next().unwrap() }
+        / "\\\'" { '\'' }
+        / "\\\\" { '\\' }
+        / "\\x" value:$(['0'..='9' | 'a'..='f' | 'A'..='F']*<2>)
+        {
+            let val = u8::from_str_radix(value, 16).unwrap();
+            assert!(val < 128, "invalid ASCII character");
+            char::from_u32(val as u32).unwrap()
         }
 } }
 
@@ -310,6 +327,9 @@ peg::parser! { pub grammar parser() for [Token] {
             let n = u8::from_str_radix(&n, base.radix()).map_err(|_| "u8: integer too large")?;
             Ok(wrap(Expr::LiteralU08(n)))
         }
+        / [Char(c)]
+        {?  Ok(wrap(Expr::LiteralU08(c as u8))) }
+
     rule literal_u16() -> Box<ParsedExpr>
         = [U16(n, base)]
         {?
