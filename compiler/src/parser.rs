@@ -4,8 +4,22 @@ use crate::ast::{DataDef, Def, Expr, ExprBound, Field, FuncDef, Program, StructD
 use crate::error::Error;
 use crate::ty::{Type, TypeBound};
 
+#[derive(Debug, Clone, Copy)]
+enum Base {
+    Hex,
+    Decimal,
+}
+impl Base {
+    fn radix(&self) -> u32 {
+        match self {
+            Base::Decimal => 10,
+            Base::Hex => 16,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
-pub enum Token {
+enum Token {
     Fun,
     Struct,
     If,
@@ -42,22 +56,22 @@ pub enum Token {
     Pipe,
     Bang,
     Ident(String),
-    U08(String),
-    U16(String),
-    U32(String),
-    U64(String),
+    U08(String, Base),
+    U16(String, Base),
+    U32(String, Base),
+    U64(String, Base),
     Str(String),
 }
 
 #[derive(Debug, Clone)]
-pub struct PosToken {
-    pub t: Token,
-    pub begin: usize,
-    pub end: usize,
+struct PosToken {
+    t: Token,
+    begin: usize,
+    end: usize,
 }
 
 peg::parser! { grammar tokenizer() for str {
-    pub rule tokenize() -> Vec<PosToken> = token()*
+    pub(super) rule tokenize() -> Vec<PosToken> = token()*
 
     rule ws()
         = quiet!{[' '|'\t'|'\n'|'\r']+}
@@ -122,19 +136,17 @@ peg::parser! { grammar tokenizer() for str {
         { Token::Ident(ident.to_string()) }
         / expected!("ident")
 
-    rule integer() -> Token
-        = int_u08() / int_u16() / int_u32() / int_u64()
-
-    rule int_str() -> String
-        = n: quiet!{$(['1'..='9']['0'..='9']* / ['0'])} { n.to_owned() }
+    rule int_str() -> (String, Base)
+        = quiet!{ !"0x" n:$(['1'..='9']['0'..='9']* / ['0'])  { (n.to_owned(), Base::Decimal) } }
+        / quiet!{  "0x" n:$(['0'..='9'|'a'..='f'|'A'..='F']+) { (n.to_owned(), Base::Hex) } }
         / expected!("integer")
 
-    rule int_u08() -> Token = n:int_str() ("_u8" / "_u08") { Token::U08(n) }
-    rule int_u16() -> Token = n:int_str() "_u16" { Token::U16(n) }
-    rule int_u32() -> Token = n:int_str() "_u32" { Token::U32(n) }
-    rule int_u64() -> Token
-        = n:int_str() "_u64" { Token::U64(n) }
-        / n:int_str()        { Token::U64(n) }
+    rule integer() -> Token
+        = n:int_str() ("_u8" / "_u08") { Token::U08(n.0, n.1) }
+        / n:int_str() "_u16" { Token::U16(n.0, n.1) }
+        / n:int_str() "_u32" { Token::U32(n.0, n.1) }
+        / n:int_str() "_u64" { Token::U64(n.0, n.1) }
+        / n:int_str()        { Token::U64(n.0, n.1) }
 
     rule utf8_string() -> Token
         = quiet!{"\"" s:(double_quoted_char()*) "\"" { Token::Str(s.into_iter().collect()) } }
@@ -189,7 +201,7 @@ peg::parser! { pub grammar parser() for [Token] {
 
 
     rule array_ty() -> Box<ParsedType>
-        = [LSquareBracket] ty:ty() [SemiColon] [U64(len)] [RSquareBracket]
+        = [LSquareBracket] ty:ty() [SemiColon] [U64(len, base)] [RSquareBracket]
         {?
             let len: usize = len.parse().or(Err("integer too large"))?;
             Ok(ParsedType::Known(Type::Array(ty, len)).into())
@@ -212,7 +224,7 @@ peg::parser! { pub grammar parser() for [Token] {
 
     // expression
 
-    pub rule expr() -> Box<ParsedExpr>
+    pub(super) rule expr() -> Box<ParsedExpr>
         = precedence! {
             location:(@) [Equal] value:@
                 { wrap(Expr::Assignment { location, value }) }
@@ -293,27 +305,27 @@ peg::parser! { pub grammar parser() for [Token] {
         / [False] { wrap(Expr::LiteralBool(false)) }
 
     rule literal_u08() -> Box<ParsedExpr>
-        = [U08(n)]
+        = [U08(n, base)]
         {?
-            let n = n.parse().or(Err("u08 literal: integer too large"))?;
+            let n = u8::from_str_radix(&n, base.radix()).map_err(|_| "u8: integer too large")?;
             Ok(wrap(Expr::LiteralU08(n)))
         }
     rule literal_u16() -> Box<ParsedExpr>
-        = [U16(n)]
+        = [U16(n, base)]
         {?
-            let n = n.parse().or(Err("u16 literal: integer too large"))?;
+            let n = u16::from_str_radix(&n, base.radix()).map_err(|_| "u16: integer too large")?;
             Ok(wrap(Expr::LiteralU16(n)))
         }
     rule literal_u32() -> Box<ParsedExpr>
-        = [U32(n)]
+        = [U32(n, base)]
         {?
-            let n = n.parse().or(Err("u32 literal: integer too large"))?;
+            let n = u32::from_str_radix(&n, base.radix()).map_err(|_| "u32: integer too large")?;
             Ok(wrap(Expr::LiteralU32(n)))
         }
     rule literal_u64() -> Box<ParsedExpr>
-        = [U64(n)]
+        = [U64(n, base)]
         {?
-            let n = n.parse().or(Err("u64 literal: integer too large"))?;
+            let n = u64::from_str_radix(&n, base.radix()).map_err(|_| "u64: integer too large")?;
             Ok(wrap(Expr::LiteralU64(n)))
         }
 
@@ -423,7 +435,7 @@ peg::parser! { pub grammar parser() for [Token] {
         = [Struct] [Ident(name)] [LBrace] fields:(field() ** [Comma]) [Comma]? [RBrace]
         { Def::Struct(StructDef { name, fields }) }
 
-    pub rule program() -> Program<ParsedExpr, ParsedType>
+    pub(super) rule program() -> Program<ParsedExpr, ParsedType>
         = defs:(function_def() / static_data() / struct_def())* { Program { defs } }
 } }
 
