@@ -288,7 +288,6 @@ peg::parser! { pub grammar parser() for [Token] {
             e:literal_struct() { e }
             e:variable_def() { e }
             e:if_expr() { e }
-            e:if_no_else_expr() { e }
             e:loop_expr() { e }
             e:while_expr() { e }
             e:for_expr() { e }
@@ -379,12 +378,14 @@ peg::parser! { pub grammar parser() for [Token] {
         { wrap(Expr::Let { name, value: e1 }) }
 
     rule if_expr() -> Box<ParsedExpr>
-        = [If] cond:expr() then_expr:block_expr() [Else] else_expr:block_expr()
-        { wrap(Expr::If { cond, then_expr, else_expr: Some(else_expr) }) }
-
-    rule if_no_else_expr() -> Box<ParsedExpr>
-        = [If] cond:expr() then_expr:block_expr()
-        { wrap(Expr::If { cond, then_expr, else_expr: None }) }
+        = [If] then_cond:expr() then_block:block_expr()
+            else_if:(([Else] [If] cond: expr() block:block_expr() { (cond, block) })*)
+            else_block:([Else] b:block_expr() { b })?
+        {
+            let mut branches = vec![(then_cond, then_block)];
+            branches.extend(else_if);
+            wrap(Expr::If { branches, else_block })
+        }
 
     rule loop_expr() -> Box<ParsedExpr>
         = [Loop] body:block_expr()
@@ -429,7 +430,6 @@ peg::parser! { pub grammar parser() for [Token] {
     rule expr_with_block() -> Box<ParsedExpr>
         = block_expr()
         / if_expr()
-        / if_no_else_expr()
         / loop_expr()
         / while_expr()
         / for_expr()

@@ -100,9 +100,8 @@ pub enum Expr<E: ExprBound> {
     },
 
     If {
-        cond: Box<E>,
-        then_expr: Box<E>,
-        else_expr: Option<Box<E>>,
+        branches: Vec<(Box<E>, Box<E>)>, // Vec<(cond, block)>
+        else_block: Option<Box<E>>,
     },
 
     Loop {

@@ -1323,63 +1323,57 @@ impl Compiler {
             }
 
             If {
-                cond,
-                then_expr,
-                else_expr: Some(else_expr),
+                branches,
+                else_block,
             } => {
                 let old_bb = self.emit_bb;
-
                 let (merge_bb, merge_addr) = self.new_block();
-                let (then_bb, then_addr) = self.new_block();
-                let (else_bb, else_addr) = self.new_block();
 
-                self.set_insertion_point(then_bb);
-                self.compile_expr(then_expr)?;
-                self.emit(I::Lit64);
-                self.emit(Ir::Pointer(merge_addr));
-                self.emit(I::Jump);
+                let mut branch_cond_addr = Vec::new();
+                for (cond, block) in branches {
+                    let (bb, addr) = self.new_block();
 
-                self.set_insertion_point(else_bb);
-                self.compile_expr(else_expr)?;
-                self.emit(I::Lit64);
-                self.emit(Ir::Pointer(merge_addr));
-                self.emit(I::Jump);
+                    self.set_insertion_point(bb);
+                    self.compile_expr(block)?;
+                    self.emit(I::Lit64);
+                    self.emit(Ir::Pointer(merge_addr));
+                    self.emit(I::Jump);
+
+                    branch_cond_addr.push((cond, addr));
+                }
+
+                let else_addr = if let Some(else_block) = else_block {
+                    let (else_bb, else_addr) = self.new_block();
+                    self.set_insertion_point(else_bb);
+                    self.compile_expr(else_block)?;
+                    self.emit(I::Lit64);
+                    self.emit(Ir::Pointer(merge_addr));
+                    self.emit(I::Jump);
+                    Some(else_addr)
+                } else {
+                    None
+                };
 
                 self.set_insertion_point(old_bb);
-                self.emit(I::Lit64);
-                self.emit(Ir::Pointer(then_addr));
-                self.compile_expr(cond)?;
-                self.emit(I::JumpIf);
-                self.emit(I::Lit64);
-                self.emit(Ir::Pointer(else_addr));
-                self.emit(I::Jump);
+
+                for (cond, addr) in branch_cond_addr {
+                    self.emit(I::Lit64);
+                    self.emit(Ir::Pointer(addr));
+                    self.compile_expr(cond)?;
+                    self.emit(I::JumpIf);
+                }
+
+                if let Some(else_addr) = else_addr {
+                    self.emit(I::Lit64);
+                    self.emit(Ir::Pointer(else_addr));
+                    self.emit(I::Jump);
+                } else {
+                    self.emit(I::Lit64);
+                    self.emit(Ir::Pointer(merge_addr));
+                    self.emit(I::Jump);
+                }
 
                 self.set_insertion_point(merge_bb);
-            }
-
-            If {
-                cond,
-                then_expr,
-                else_expr: None,
-            } => {
-                let old_bb = self.emit_bb;
-
-                let merge_addr = self.new_pointer();
-                let (then_bb, then_addr) = self.new_block();
-
-                self.set_insertion_point(then_bb);
-                self.compile_expr(then_expr)?;
-                self.emit(I::Lit64);
-                self.emit(Ir::Pointer(merge_addr));
-                self.emit(I::Jump);
-
-                self.set_insertion_point(old_bb);
-                self.emit(I::Lit64);
-                self.emit(Ir::Pointer(then_addr));
-                self.compile_expr(cond)?;
-                self.emit(I::JumpIf);
-
-                self.emit(Ir::Pointee(merge_addr));
             }
 
             Loop { body } => {

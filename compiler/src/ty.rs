@@ -603,37 +603,40 @@ impl TypeChecker {
             }
 
             If {
-                cond,
-                then_expr,
-                else_expr,
+                branches,
+                else_block,
             } => {
-                let cond = self.type_expr(cond, Category::Regular)?;
-                assert_type_eq(&cond.ty, &Type::Bool.into())?;
+                let then_block = self.type_expr(branches[0].1.clone(), Category::Regular)?;
+                let block_ty = then_block.ty.clone();
 
-                match else_expr {
-                    Some(else_expr) => {
-                        let then_expr = self.type_expr(then_expr, Category::Regular)?;
-                        let else_expr = self.type_expr(else_expr, Category::Regular)?;
-                        assert_type_eq(&then_expr.ty, &else_expr.ty)?;
-                        let ty = then_expr.ty.clone();
-                        let if_expr = If {
-                            cond,
-                            then_expr,
-                            else_expr: Some(else_expr),
-                        };
-                        wrap(if_expr, ty)
+                let mut typed_branches = Vec::new();
+                for (cond, block) in branches {
+                    let cond = self.type_expr(cond, Category::Regular)?;
+                    let block = self.type_expr(block, Category::Regular)?;
+                    assert_type_eq(&cond.ty, &Type::Bool.into())?;
+                    assert_type_eq(&block.ty, &block_ty)?;
+                    typed_branches.push((cond, block));
+                }
+
+                let else_block = match else_block {
+                    Some(block) => {
+                        let b = self.type_expr(block, Category::Regular)?;
+                        assert_type_eq(&b.ty, &block_ty)?;
+                        Some(b)
                     }
                     None => {
-                        let then_expr = self.type_expr(then_expr, Category::Regular)?;
-                        assert_type_eq(&then_expr.ty, &Type::Void.into())?;
-                        let if_expr = If {
-                            cond,
-                            then_expr,
-                            else_expr: None,
-                        };
-                        wrap(if_expr, Type::Void.into())
+                        assert_type_eq(&block_ty, &Type::Void.into())?;
+                        None
                     }
-                }
+                };
+
+                wrap(
+                    If {
+                        branches: typed_branches,
+                        else_block,
+                    },
+                    block_ty,
+                )
             }
 
             Loop { body } => {
