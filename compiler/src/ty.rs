@@ -121,6 +121,8 @@ struct TypeChecker {
 
     // struct name --> StructDef
     struct_def: HashMap<String, StructDef<ResolvedType>>,
+
+    func_return_ty: Option<ResolvedType>,
 }
 
 impl TypeChecker {
@@ -129,6 +131,7 @@ impl TypeChecker {
             env: TypeEnv::new(),
             type_map: HashMap::new(),
             struct_def: HashMap::new(),
+            func_return_ty: None,
         }
     }
 
@@ -284,6 +287,8 @@ impl TypeChecker {
         };
         self.env.insert(name.clone(), ty.into());
 
+        self.func_return_ty = Some(ret_ty.clone());
+
         //------------------------------------------------------
         self.env.create_new_scope();
 
@@ -296,6 +301,8 @@ impl TypeChecker {
 
         self.env.pop_scope();
         //------------------------------------------------------
+
+        self.func_return_ty = None;
 
         Ok(FuncDef {
             name,
@@ -624,6 +631,16 @@ impl TypeChecker {
                         todo!("not a callable type")
                     }
                 }
+            }
+
+            Return(e) => {
+                let e = self.type_expr(e, Category::Regular)?;
+                let ret_ty = self
+                    .func_return_ty
+                    .as_ref()
+                    .expect("return is only allowed in a function body"); // FIXME: return error
+                assert_type_eq(&e.ty, ret_ty)?;
+                wrap(Expr::Return(e), Type::Void.into())
             }
 
             If {

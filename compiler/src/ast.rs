@@ -101,6 +101,8 @@ pub enum Expr<E: ExprBound, T: TypeBound> {
         args: Vec<Box<E>>,
     },
 
+    Return(Box<E>),
+
     If {
         branches: Vec<(Box<E>, Box<E>)>, // Vec<(cond, block)>
         else_block: Option<Box<E>>,

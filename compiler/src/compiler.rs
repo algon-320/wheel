@@ -106,12 +106,14 @@ enum Addr {
 struct FunctionContext {
     stack_cursor: u64,
     required_memory: u64,
+    return_bb_addr: PointerId,
 }
 impl FunctionContext {
-    fn new() -> Self {
+    fn new(return_bb_addr: PointerId) -> Self {
         Self {
             stack_cursor: 0,
             required_memory: 0,
+            return_bb_addr,
         }
     }
 
@@ -598,6 +600,8 @@ impl Compiler {
 
     fn compile_function(&mut self, fun: FuncDef<TypedExpr, ResolvedType>) -> Result<(), Error> {
         let (func_bb, func_addr) = self.new_block();
+        let (return_bb, return_addr) = self.new_block();
+
         self.set_insertion_point(func_bb);
 
         let addr = Addr::Static(func_addr);
@@ -618,7 +622,7 @@ impl Compiler {
             offset += p.ty.size_of() as i64;
         }
 
-        self.func_ctx = Some(FunctionContext::new());
+        self.func_ctx = Some(FunctionContext::new(return_addr));
         self.compile_expr(fun.body)?;
         let fctx = self.func_ctx.take().unwrap();
 
@@ -653,6 +657,12 @@ impl Compiler {
 
         // Epilogue
         {
+            self.emit(I::Lit64);
+            self.emit(Ir::Pointer(return_addr));
+            self.emit(I::Jump);
+
+            self.set_insertion_point(return_bb);
+
             //                <-- SP
             // [ ret val    ]
             // [ local vars ]
@@ -1483,6 +1493,19 @@ impl Compiler {
                         self.generate_drop(ty.size_of());
                     }
                 }
+            }
+
+            Return(e) => {
+                let func_ctx = self
+                    .func_ctx
+                    .as_ref()
+                    .expect("return is only allowed in a function body");
+                let ret_addr = Ir::Pointer(func_ctx.return_bb_addr);
+
+                self.compile_expr(e)?;
+                self.emit(I::Lit64);
+                self.emit(ret_addr);
+                self.emit(I::Jump);
             }
 
             If {

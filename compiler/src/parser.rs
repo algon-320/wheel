@@ -29,6 +29,7 @@ enum Token {
     For,
     Break,
     Continue,
+    Return,
     Let,
     As,
     LParen,
@@ -84,7 +85,7 @@ peg::parser! { grammar tokenizer() for str {
         = (ws() / comment())*
           begin:position!() tok:(
             fun() / struct_() / if_() / else_() / loop_() / while_() / for_() /
-            break_() / continue_() /
+            break_() / continue_() / return_() /
             let_() / as_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
             at() / dot() / colon() / semicolon() / comma() / equal() / lt() / gt() /
@@ -102,6 +103,7 @@ peg::parser! { grammar tokenizer() for str {
     rule for_() -> Token = "for" !alnum_() { Token::For }
     rule break_() -> Token = "break" !alnum_() { Token::Break }
     rule continue_() -> Token = "continue" !alnum_() { Token::Continue }
+    rule return_() -> Token = "return" !alnum_() { Token::Return }
     rule let_() -> Token = "let" !alnum_() { Token::Let }
     rule as_() -> Token = "as" !alnum_() { Token::As }
     rule boolean() -> Token
@@ -253,6 +255,8 @@ peg::parser! { pub grammar parser() for [Token] {
                 { wrap(Expr::AssignMul { location, value }) }
             location:(@) [Slash] [Equal] value:@
                 { wrap(Expr::AssignDiv { location, value }) }
+            --
+            [Return] e:@              { wrap(Expr::Return(e)) }
             --
             l:(@) [Pipe] [Pipe] r:@   { wrap(Expr::LOr(l, r)) }
             l:(@) [And] [And] r:@     { wrap(Expr::LAnd(l, r)) }
