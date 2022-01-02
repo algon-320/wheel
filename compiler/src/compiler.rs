@@ -27,6 +27,16 @@ fn store_nb(nb: u8) -> I {
     }
 }
 
+fn eq_nb(nb: u8) -> I {
+    match nb {
+        1 => I::Eq08,
+        2 => I::Eq16,
+        4 => I::Eq32,
+        8 => I::Eq64,
+        _ => unimplemented!(),
+    }
+}
+
 #[derive(Debug, Clone)]
 enum Ir {
     OpCode(I),
@@ -1009,6 +1019,159 @@ impl Compiler {
                     self.generate_drop(obj_ty.size_of() - size);
 
                     //   10: [ field2 ]
+                }
+            }
+
+            Cast(e, ty) => {
+                fn literal(c: &mut Compiler, ty: &ResolvedType, v: u8) {
+                    match &ty.0 {
+                        Type::U08 => {
+                            c.emit(I::Lit08);
+                            c.emit(v as u8);
+                        }
+                        Type::U16 => {
+                            c.emit(I::Lit16);
+                            c.emit(v as u16);
+                        }
+                        Type::U32 => {
+                            c.emit(I::Lit32);
+                            c.emit(v as u32);
+                        }
+                        Type::U64 => {
+                            c.emit(I::Lit64);
+                            c.emit(v as u64);
+                        }
+                        _ => panic!(),
+                    }
+                }
+
+                let from = &e.ty.clone();
+                let to = &ty;
+
+                match (&from.0, &to.0) {
+                    (
+                        Type::U08 | Type::U16 | Type::U32 | Type::U64,
+                        Type::U08 | Type::U16 | Type::U32 | Type::U64,
+                    ) => {
+                        self.compile_expr(e)?;
+
+                        use std::cmp::Ordering;
+                        match u64::cmp(&from.size_of(), &to.size_of()) {
+                            Ordering::Less => {
+                                let gap = to.size_of() - from.size_of() * 2;
+                                if gap > 0 {
+                                    self.emit(I::GetSp);
+                                    self.emit(I::Lit64);
+                                    self.emit(gap);
+                                    self.emit(I::Sub64);
+                                    self.emit(I::SetSp);
+                                }
+
+                                // copy the value
+                                for _ in 0..from.size_of() {
+                                    self.emit(I::GetSp);
+                                    self.emit(I::Lit64);
+                                    self.emit(gap + from.size_of() - 1);
+                                    self.emit(I::Add64);
+                                    self.emit(I::Load08);
+                                }
+
+                                // fill with zero
+                                for i in 0..from.size_of() {
+                                    self.emit(I::Lit08);
+                                    self.emit(0_u8);
+
+                                    self.emit(I::GetSp);
+                                    self.emit(I::Lit64);
+                                    self.emit(to.size_of() - i);
+                                    self.emit(I::Add64);
+                                    self.emit(I::Store08);
+                                }
+                            }
+                            Ordering::Greater => {
+                                // Keep first `to.size_of()` bytes
+                                for _ in 0..to.size_of() {
+                                    self.emit(I::GetSp);
+                                    self.emit(I::Lit64);
+                                    self.emit(from.size_of() - to.size_of());
+                                    self.emit(I::Add64);
+                                    self.emit(I::Store08);
+                                }
+                                let rest = from.size_of() - to.size_of() * 2;
+                                if rest > 0 {
+                                    self.generate_drop(rest as u64);
+                                }
+                            }
+                            Ordering::Equal => {
+                                // no actual conversion needed
+                            }
+                        }
+                    }
+
+                    (Type::Bool, Type::U08 | Type::U16 | Type::U32 | Type::U64) => {
+                        let (true_bb, true_addr) = self.new_block();
+                        let (merge_bb, merge_addr) = self.new_block();
+
+                        self.emit(I::Lit64);
+                        self.emit(Ir::Pointer(true_addr));
+
+                        self.compile_expr(e)?;
+
+                        self.emit(I::JumpIf);
+
+                        // false --> 0
+                        literal(self, to, 0);
+                        self.emit(I::Lit64);
+                        self.emit(Ir::Pointer(merge_addr));
+                        self.emit(I::Jump);
+
+                        self.set_insertion_point(true_bb);
+                        // true --> 1
+                        literal(self, to, 1);
+                        self.emit(I::Lit64);
+                        self.emit(Ir::Pointer(merge_addr));
+                        self.emit(I::Jump);
+
+                        self.set_insertion_point(merge_bb);
+                    }
+
+                    (Type::U08 | Type::U16 | Type::U32 | Type::U64, Type::Bool) => {
+                        let (false_bb, false_addr) = self.new_block();
+                        let (merge_bb, merge_addr) = self.new_block();
+
+                        self.emit(I::Lit64);
+                        self.emit(Ir::Pointer(false_addr));
+
+                        self.compile_expr(e)?;
+                        literal(self, from, 0);
+                        self.emit(eq_nb(from.size_of() as u8));
+
+                        self.emit(I::JumpIf);
+
+                        // --> true
+                        self.emit(I::Lit08);
+                        self.emit(1_u8);
+                        self.emit(I::Lit64);
+                        self.emit(Ir::Pointer(merge_addr));
+                        self.emit(I::Jump);
+
+                        self.set_insertion_point(false_bb);
+                        // --> false
+                        self.emit(I::Lit08);
+                        self.emit(0_u8);
+                        self.emit(I::Lit64);
+                        self.emit(Ir::Pointer(merge_addr));
+                        self.emit(I::Jump);
+
+                        self.set_insertion_point(merge_bb);
+                    }
+
+                    (Type::Ptr(_) | Type::U64, Type::Ptr(_) | Type::U64) => {
+                        self.compile_expr(e)?;
+                        // no actual conversion needed
+                    }
+
+                    _ => unreachable!("invalid cast"),
                 }
             }
 

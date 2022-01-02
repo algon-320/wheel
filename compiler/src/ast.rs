@@ -42,7 +42,7 @@ pub struct StructDef<T: TypeBound> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr<E: ExprBound> {
+pub enum Expr<E: ExprBound, T: TypeBound> {
     LiteralVoid,
     LiteralBool(bool),
     LiteralU08(u8),
@@ -77,6 +77,8 @@ pub enum Expr<E: ExprBound> {
         obj: Box<E>,
         field: String,
     },
+
+    Cast(Box<E>, Box<T>),
 
     Add(Box<E>, Box<E>),
     Sub(Box<E>, Box<E>),

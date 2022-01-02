@@ -30,7 +30,7 @@ enum Token {
     Break,
     Continue,
     Let,
-    In,
+    As,
     LParen,
     RParen,
     LBrace,
@@ -85,7 +85,7 @@ peg::parser! { grammar tokenizer() for str {
           begin:position!() tok:(
             fun() / struct_() / if_() / else_() / loop_() / while_() / for_() /
             break_() / continue_() /
-            let_() / in_() / boolean() / paren() / arrow() /
+            let_() / as_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
             at() / dot() / colon() / semicolon() / comma() / equal() / lt() / gt() /
             and() / pipe() / bang() / ident() / integer() / utf8_string() / ascii_char()
@@ -103,7 +103,7 @@ peg::parser! { grammar tokenizer() for str {
     rule break_() -> Token = "break" !alnum_() { Token::Break }
     rule continue_() -> Token = "continue" !alnum_() { Token::Continue }
     rule let_() -> Token = "let" !alnum_() { Token::Let }
-    rule in_() -> Token = "in" !alnum_() { Token::In }
+    rule as_() -> Token = "as" !alnum_() { Token::As }
     rule boolean() -> Token
         = "true" !alnum_() { Token::True } / "false" !alnum_() { Token::False }
     rule paren() -> Token
@@ -188,11 +188,11 @@ impl TypeBound for ParsedType {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedExpr {
-    pub e: Expr<ParsedExpr>,
+    pub e: Expr<ParsedExpr, ParsedType>,
 }
 impl ExprBound for ParsedExpr {}
 
-fn wrap(e: Expr<ParsedExpr>) -> Box<ParsedExpr> {
+fn wrap(e: Expr<ParsedExpr, ParsedType>) -> Box<ParsedExpr> {
     Box::new(ParsedExpr { e })
 }
 
@@ -308,6 +308,8 @@ peg::parser! { pub grammar parser() for [Token] {
             e:literal_slice_from_ptr() { e }
             e:literal_string() { e }
             e:variable() { e }
+
+            e:@ [As] ty:ty() { wrap(Expr::Cast(e, ty)) }
 
             [LParen] expr:expr() [RParen] { expr }
         }

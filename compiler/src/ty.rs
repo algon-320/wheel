@@ -70,13 +70,13 @@ pub enum Category {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedExpr {
-    pub e: Expr<TypedExpr>,
+    pub e: Expr<TypedExpr, ResolvedType>,
     pub ty: ResolvedType,
     pub cat: Category,
 }
 impl ExprBound for TypedExpr {}
 
-type BinCtor = fn(Box<TypedExpr>, Box<TypedExpr>) -> Expr<TypedExpr>;
+type BinCtor = fn(Box<TypedExpr>, Box<TypedExpr>) -> Expr<TypedExpr, ResolvedType>;
 
 use std::collections::HashMap;
 struct TypeEnv {
@@ -317,7 +317,8 @@ impl TypeChecker {
             }
         }
 
-        let wrap = |e: Expr<TypedExpr>, ty: ResolvedType| Box::new(TypedExpr { e, ty, cat });
+        let wrap =
+            |e: Expr<TypedExpr, ResolvedType>, ty: ResolvedType| Box::new(TypedExpr { e, ty, cat });
 
         use Expr::*;
         let typed_expr = match expr.e {
@@ -503,6 +504,29 @@ impl TypeChecker {
                     }
 
                     _ => todo!("member access for non-struct value"),
+                }
+            }
+
+            Cast(e, ty) => {
+                let ty = self.resolve(*ty)?;
+                let e = self.type_expr(e, Category::Regular)?;
+
+                let integer_cast = matches!(
+                    (&e.ty.0, &ty.0),
+                    (
+                        Type::Bool | Type::U08 | Type::U16 | Type::U32 | Type::U64,
+                        Type::Bool | Type::U08 | Type::U16 | Type::U32 | Type::U64,
+                    )
+                );
+                let pointer_cast = matches!(
+                    (&e.ty.0, &ty.0),
+                    (Type::Ptr(_) | Type::U64, Type::Ptr(_) | Type::U64)
+                );
+
+                if integer_cast || pointer_cast {
+                    wrap(Cast(e, ty.clone().into()), ty)
+                } else {
+                    todo!("invalid cast")
                 }
             }
 

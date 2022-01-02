@@ -1,0 +1,15 @@
+fn main() -> u64 {
+    let res = 1_u08;
+
+    res *= (0xF0F0F0F0_u32 as u8 == 0xF0_u08) as u08;
+    res *= (0xF0_u08 as u32 == 0xF0_u32) as u08;
+    res *= (0xF0_u08 as u32 as u8 == 0xF0_u08) as u08;
+    res *= (0xF0F0F0F0_u32 as u8 as u32 == 0xF0_u32) as u08;
+    res *= (0xF0F0F0F0_u32 as u16 as u32 == 0xF0F0_u32) as u08;
+    res *= (0xF0_u08 as u16 as u32 == 0xF0_u32) as u08;
+
+    res *= 1_u08 as bool as u08;
+    res *= (!(0_u08 as bool)) as u08;
+
+    res as u64
+}
