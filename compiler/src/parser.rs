@@ -162,17 +162,23 @@ peg::parser! { grammar tokenizer() for str {
     rule double_quoted_char() -> char
         = !("\"" / "\\") c:$([_]) { c.chars().next().unwrap() }
         / "\\\"" { '"' }
-        / "\\\\" { '\\' }
         / "\\u{" value:$(['0'..='9' | 'a'..='f' | 'A'..='F']+) "}"
         {
             let val = u32::from_str_radix(value, 16).unwrap();
             char::from_u32(val).unwrap()
         }
+        / common_quoted_char()
 
     rule single_quoted_char() -> char
         = !("\\'" / "\\") c:$([_]) { c.chars().next().unwrap() }
         / "\\\'" { '\'' }
-        / "\\\\" { '\\' }
+        / common_quoted_char()
+
+    rule common_quoted_char() -> char
+        = "\\\\" { '\\' }
+        / "\\n" { '\n' }
+        / "\\r" { '\r' }
+        / "\\t" { '\t' }
         / "\\x" value:$(['0'..='9' | 'a'..='f' | 'A'..='F']*<2>)
         {
             let val = u8::from_str_radix(value, 16).unwrap();
