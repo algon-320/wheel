@@ -1,5 +1,6 @@
 use log::{debug, info, trace};
 
+use crate::device::basic_serial::BasicSerial;
 use crate::memory::Memory;
 use crate::num::Int;
 use spec::Instruction;
@@ -9,21 +10,23 @@ pub struct Cpu {
     bp: u64,
     sp: u64,
     mem: Memory,
+    serial: BasicSerial,
 }
 
 impl Cpu {
-    pub fn new(mem: Memory) -> Self {
+    pub fn new(mem: Memory, serial: BasicSerial) -> Self {
         Self {
             ip: 0,
             bp: mem.size() as u64,
             sp: mem.size() as u64,
             mem,
+            serial,
         }
     }
 
     pub fn execute(&mut self) -> Result<(), ()> {
         let ip = self.ip;
-        let opcode = self.mem.read(ip).unwrap();
+        let opcode = self.bus_read(ip);
         let op = Instruction::from(opcode);
         self.ip += 1;
 
@@ -33,9 +36,39 @@ impl Cpu {
     pub fn inspect_stack<T: Int>(&mut self) -> T {
         let mut bytes = T::Bytes::default();
         for (i, b) in bytes.as_mut().iter_mut().enumerate() {
-            *b = self.mem.read(self.sp + i as u64).expect("memory overflow");
+            *b = self.bus_read(self.sp + i as u64);
         }
         T::from_le_bytes(bytes)
+    }
+
+    #[inline]
+    fn bus_write(&mut self, addr: u64, data: u8) {
+        if addr & 0x8000_0000_0000_0000 == 0 {
+            self.mem.write(addr, data).expect("mem write");
+        } else {
+            use spec::MmioBase;
+            const SERIAL_BASE: u64 = MmioBase::BasicSerial as u64;
+            const SERIAL_END: u64 = SERIAL_BASE + 2;
+            if SERIAL_BASE <= addr && addr < SERIAL_END {
+                self.serial.write(addr, data).expect("serial write");
+            }
+        }
+    }
+
+    #[inline]
+    fn bus_read(&mut self, addr: u64) -> u8 {
+        if addr & 0x8000_0000_0000_0000 == 0 {
+            self.mem.read(addr).expect("mem read")
+        } else {
+            use spec::MmioBase;
+            const SERIAL_BASE: u64 = MmioBase::BasicSerial as u64;
+            const SERIAL_END: u64 = SERIAL_BASE + 2;
+            if SERIAL_BASE <= addr && addr < SERIAL_END {
+                self.serial.read(addr).expect("serial read")
+            } else {
+                panic!("invalid MMIO address");
+            }
+        }
     }
 
     fn eval(&mut self, inst: Instruction) -> Result<(), ()> {
@@ -113,7 +146,7 @@ impl Cpu {
         let bytes = val.to_le_bytes();
         for &b in bytes.as_ref().iter().rev() {
             self.sp -= 1;
-            self.mem.write(self.sp, b).expect("memory overflow");
+            self.bus_write(self.sp, b);
         }
         trace!("stack_push: addr={:?} val={:?}", self.sp, val);
     }
@@ -121,7 +154,7 @@ impl Cpu {
     fn stack_pop<T: Int>(&mut self) -> T {
         let mut bytes = T::Bytes::default();
         for b in bytes.as_mut() {
-            *b = self.mem.read(self.sp).expect("memory overflow");
+            *b = self.bus_read(self.sp);
             self.sp += 1;
         }
         T::from_le_bytes(bytes)
@@ -132,7 +165,7 @@ impl Cpu {
         let mut bytes = T::Bytes::default();
         let slice = bytes.as_mut();
         for b in slice.iter_mut() {
-            *b = self.mem.read(self.ip).unwrap();
+            *b = self.bus_read(self.ip);
             self.ip += 1;
         }
         let val = T::from_le_bytes(bytes);
@@ -215,7 +248,7 @@ impl Cpu {
         let mut bytes = T::Bytes::default();
         let slice = bytes.as_mut();
         for b in slice.iter_mut() {
-            *b = self.mem.read(addr).expect("mem overflow");
+            *b = self.bus_read(addr);
             addr += 1;
         }
 
@@ -232,7 +265,7 @@ impl Cpu {
 
         let bytes = val.to_le_bytes();
         for &b in bytes.as_ref() {
-            self.mem.write(addr, b).expect("mem overflow");
+            self.bus_write(addr, b);
             addr += 1;
         }
     }
@@ -288,12 +321,12 @@ impl Cpu {
 
     #[inline]
     fn debug_comment(&mut self) {
-        let len = self.mem.read(self.ip).unwrap();
+        let len = self.bus_read(self.ip);
         self.ip += 1;
 
         let mut bytes = vec![0; len as usize];
         for b in bytes.iter_mut() {
-            *b = self.mem.read(self.ip).unwrap();
+            *b = self.bus_read(self.ip);
             self.ip += 1;
         }
         let s = String::from_utf8(bytes).expect("invalid UTF-8");

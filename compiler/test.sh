@@ -4,6 +4,7 @@ set -euf -o pipefail
 options="-g"
 stack_size=4096
 files=$(find examples -name '*.wheel')
+tmp_file=$(mktemp -t 'wheel-test-result.XXXXXXXXXX')
 
 echo "Compile Options: $options"
 
@@ -15,11 +16,15 @@ for f in $files; do
 
     file_size=$(stat --format '%s' $f)
     mem=$(($file_size + $stack_size))
-    result=$(../target/release/vm -m "$mem" out.bin)
 
-    diff "$f.expected" <(echo $result) && echo "ok!"
+    ../target/release/vm -m "$mem" out.bin 2>/dev/null > "$tmp_file"
+
+    diff "$f.expected" "$tmp_file" && echo "ok!"
 done
 echo ""
+
+# device IO is currently not supported by the asm VM
+files=$(find examples -name '*.wheel' -not -path '*mmio_*')
 
 echo "Running tests on x86_64 asm VM"
 (cd ../asm_vm_x86_64 && make)
@@ -29,7 +34,9 @@ for f in $files; do
 
     file_size=$(stat --format '%s' $f)
     mem=$(($file_size + $stack_size))
-    result=$(../asm_vm_x86_64/main -m "$mem")
+    ../asm_vm_x86_64/main -m "$mem" > "$tmp_file"
 
-    diff "$f.expected" <(echo $result) && echo "ok!"
+    diff "$f.expected" "$tmp_file" && echo "ok!"
 done
+
+rm "$tmp_file"

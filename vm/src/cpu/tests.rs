@@ -1,4 +1,5 @@
 use super::*;
+use crate::device::basic_serial::BasicSerial;
 use crate::memory::Memory;
 use crate::num::Int;
 use spec::Instruction as I;
@@ -64,9 +65,14 @@ fn read_int<T: Int>(mem: &Memory, addr: u64) -> T {
     T::from_le_bytes(bytes)
 }
 
+fn new_cpu(mem: Memory) -> Cpu {
+    let serial = BasicSerial::new();
+    Cpu::new(mem, serial)
+}
+
 #[test]
 fn stack() {
-    let mut cpu = Cpu::new(Memory::new(0x1000));
+    let mut cpu = new_cpu(Memory::new(0x1000));
 
     let old_sp = cpu.sp;
     cpu.stack_push::<u8>(1);
@@ -89,7 +95,7 @@ fn stack() {
 fn lit08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Lit08.into(), (123 as u8).into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     for _ in 0..2 {
         cpu.execute().unwrap();
     }
@@ -100,7 +106,7 @@ fn lit08() {
 fn lit16() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Lit16.into(), (123 as u16).into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     for _ in 0..2 {
         cpu.execute().unwrap();
     }
@@ -111,7 +117,7 @@ fn lit16() {
 fn lit32() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Lit32.into(), (123 as u32).into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     for _ in 0..2 {
         cpu.execute().unwrap();
     }
@@ -122,7 +128,7 @@ fn lit32() {
 fn lit64() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Lit64.into(), (123 as u64).into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     for _ in 0..2 {
         cpu.execute().unwrap();
     }
@@ -133,7 +139,7 @@ fn lit64() {
 fn drop08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Drop08.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u8>(12);
     cpu.stack_push::<u8>(23);
     cpu.execute().unwrap();
@@ -144,7 +150,7 @@ fn drop08() {
 fn drop16() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Drop16.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u16>(123);
     cpu.stack_push::<u16>(456);
     cpu.execute().unwrap();
@@ -155,7 +161,7 @@ fn drop16() {
 fn drop32() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Drop32.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u32>(123);
     cpu.stack_push::<u32>(456);
     cpu.execute().unwrap();
@@ -166,7 +172,7 @@ fn drop32() {
 fn drop64() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Drop64.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u64>(123);
     cpu.stack_push::<u64>(456);
     cpu.execute().unwrap();
@@ -177,7 +183,7 @@ fn drop64() {
 fn add08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Add08.into(), I::Add08.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u8>(11);
     cpu.stack_push::<u8>(22);
@@ -194,7 +200,7 @@ fn add08() {
 fn add16() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Add16.into(), I::Add16.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u16>(11);
     cpu.stack_push::<u16>(22);
@@ -211,7 +217,7 @@ fn add16() {
 fn add32() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Add32.into(), I::Add32.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u32>(11);
     cpu.stack_push::<u32>(22);
@@ -228,7 +234,7 @@ fn add32() {
 fn add64() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Add64.into(), I::Add64.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u64>(11);
     cpu.stack_push::<u64>(22);
@@ -245,7 +251,7 @@ fn add64() {
 fn sub08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Sub08.into(), I::Sub08.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u8>(123);
     cpu.stack_push::<u8>(23);
@@ -262,7 +268,7 @@ fn sub08() {
 fn sub16() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Sub16.into(), I::Sub16.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u16>(123);
     cpu.stack_push::<u16>(23);
@@ -279,7 +285,7 @@ fn sub16() {
 fn sub32() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Sub32.into(), I::Sub32.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u32>(123);
     cpu.stack_push::<u32>(23);
@@ -296,7 +302,7 @@ fn sub32() {
 fn sub64() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Sub64.into(), I::Sub64.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u64>(123);
     cpu.stack_push::<u64>(23);
@@ -313,7 +319,7 @@ fn sub64() {
 fn mul08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Mul08.into(), I::Mul08.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u8>(11);
     cpu.stack_push::<u8>(22);
@@ -330,7 +336,7 @@ fn mul08() {
 fn mul16() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Mul16.into(), I::Mul16.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u16>(11);
     cpu.stack_push::<u16>(22);
@@ -347,7 +353,7 @@ fn mul16() {
 fn mul32() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Mul32.into(), I::Mul32.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u32>(11);
     cpu.stack_push::<u32>(22);
@@ -364,7 +370,7 @@ fn mul32() {
 fn mul64() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Mul64.into(), I::Mul64.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u64>(11);
     cpu.stack_push::<u64>(22);
@@ -381,7 +387,7 @@ fn mul64() {
 fn div08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Div08.into(), I::Div08.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u8>(10);
     cpu.stack_push::<u8>(2);
@@ -398,7 +404,7 @@ fn div08() {
 fn div16() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Div16.into(), I::Div16.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u16>(10);
     cpu.stack_push::<u16>(2);
@@ -415,7 +421,7 @@ fn div16() {
 fn div32() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Div32.into(), I::Div32.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u32>(10);
     cpu.stack_push::<u32>(2);
@@ -432,7 +438,7 @@ fn div32() {
 fn div64() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Div64.into(), I::Div64.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u64>(10);
     cpu.stack_push::<u64>(2);
@@ -449,7 +455,7 @@ fn div64() {
 fn eq08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Eq08.into(), I::Eq08.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u8>(123);
     cpu.stack_push::<u8>(123);
@@ -466,7 +472,7 @@ fn eq08() {
 fn eq16() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Eq16.into(), I::Eq16.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u16>(123);
     cpu.stack_push::<u16>(123);
@@ -483,7 +489,7 @@ fn eq16() {
 fn eq32() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Eq32.into(), I::Eq32.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u32>(123);
     cpu.stack_push::<u32>(123);
@@ -500,7 +506,7 @@ fn eq32() {
 fn eq64() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Eq64.into(), I::Eq64.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
 
     cpu.stack_push::<u64>(123);
     cpu.stack_push::<u64>(123);
@@ -518,19 +524,19 @@ fn lt08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Lt08.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u8>(1);
     cpu.stack_push::<u8>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 1);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u8>(2);
     cpu.stack_push::<u8>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u8>(2);
     cpu.stack_push::<u8>(1);
     cpu.execute().unwrap();
@@ -542,19 +548,19 @@ fn lt16() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Lt16.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u16>(1);
     cpu.stack_push::<u16>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 1);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u16>(2);
     cpu.stack_push::<u16>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u16>(2);
     cpu.stack_push::<u16>(1);
     cpu.execute().unwrap();
@@ -566,19 +572,19 @@ fn lt32() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Lt32.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u32>(1);
     cpu.stack_push::<u32>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 1);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u32>(2);
     cpu.stack_push::<u32>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u32>(2);
     cpu.stack_push::<u32>(1);
     cpu.execute().unwrap();
@@ -590,19 +596,19 @@ fn lt64() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Lt64.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u64>(1);
     cpu.stack_push::<u64>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 1);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u64>(2);
     cpu.stack_push::<u64>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u64>(2);
     cpu.stack_push::<u64>(1);
     cpu.execute().unwrap();
@@ -614,19 +620,19 @@ fn gt08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Gt08.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u8>(1);
     cpu.stack_push::<u8>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u8>(2);
     cpu.stack_push::<u8>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u8>(2);
     cpu.stack_push::<u8>(1);
     cpu.execute().unwrap();
@@ -638,19 +644,19 @@ fn gt16() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Gt16.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u16>(1);
     cpu.stack_push::<u16>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u16>(2);
     cpu.stack_push::<u16>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u16>(2);
     cpu.stack_push::<u16>(1);
     cpu.execute().unwrap();
@@ -662,19 +668,19 @@ fn gt32() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Gt32.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u32>(1);
     cpu.stack_push::<u32>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u32>(2);
     cpu.stack_push::<u32>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u32>(2);
     cpu.stack_push::<u32>(1);
     cpu.execute().unwrap();
@@ -686,19 +692,19 @@ fn gt64() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Gt64.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u64>(1);
     cpu.stack_push::<u64>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u64>(2);
     cpu.stack_push::<u64>(2);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 0);
 
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u64>(2);
     cpu.stack_push::<u64>(1);
     cpu.execute().unwrap();
@@ -710,7 +716,7 @@ fn load08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Load08.into()]);
     mem.write(0x100, 123).unwrap();
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u64>(0x100);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u8>(), 123);
@@ -721,7 +727,7 @@ fn load16() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Load16.into()]);
     write_bytes(&mut mem, 0x100, &123u16.to_le_bytes());
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u64>(0x100);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u16>(), 123);
@@ -732,7 +738,7 @@ fn load32() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Load32.into()]);
     write_bytes(&mut mem, 0x100, &123u32.to_le_bytes());
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u64>(0x100);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u32>(), 123);
@@ -743,7 +749,7 @@ fn load64() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Load64.into()]);
     write_bytes(&mut mem, 0x100, &123u64.to_le_bytes());
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u64>(0x100);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u64>(), 123);
@@ -753,7 +759,7 @@ fn load64() {
 fn store08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Store08.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u8>(123);
     cpu.stack_push::<u64>(0x100);
     cpu.execute().unwrap();
@@ -764,7 +770,7 @@ fn store08() {
 fn store16() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Store16.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u16>(123);
     cpu.stack_push::<u64>(0x100);
     cpu.execute().unwrap();
@@ -775,7 +781,7 @@ fn store16() {
 fn store32() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Store32.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u32>(123);
     cpu.stack_push::<u64>(0x100);
     cpu.execute().unwrap();
@@ -786,7 +792,7 @@ fn store32() {
 fn store64() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Store64.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u64>(123);
     cpu.stack_push::<u64>(0x100);
     cpu.execute().unwrap();
@@ -808,7 +814,7 @@ fn jump() {
             I::Add08.into(),
         ],
     );
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u64>(0x100);
     assert_eq!(cpu.ip, 0x000);
     cpu.execute().unwrap(); // Jump
@@ -825,7 +831,7 @@ fn jump_if() {
     write_text(&mut mem, 0x000, &[I::JumpIf.into(), I::Mul08.into()]);
     write_text(&mut mem, 0x100, &[I::Add08.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u8>(3);
     cpu.stack_push::<u8>(5);
     cpu.stack_push::<u64>(0x100);
@@ -836,7 +842,7 @@ fn jump_if() {
     cpu.execute().unwrap(); // Add08
     assert_eq!(cpu.stack_pop::<u8>(), 8);
 
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.stack_push::<u8>(3);
     cpu.stack_push::<u8>(5);
     cpu.stack_push::<u64>(0x100);
@@ -856,7 +862,7 @@ fn get_ip() {
         0,
         &[I::Nop.into(), I::Nop.into(), I::Nop.into(), I::GetIp.into()],
     );
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.execute().unwrap();
     cpu.execute().unwrap();
     cpu.execute().unwrap();
@@ -870,11 +876,11 @@ fn get_bp() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::GetBp.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u64>(), cpu.bp);
 
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.bp = 0x500;
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u64>(), cpu.bp);
@@ -886,12 +892,12 @@ fn set_bp() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::SetBp.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u64>(0x500);
     cpu.execute().unwrap();
     assert_eq!(cpu.bp, 0x500);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u64>(0x123);
     cpu.execute().unwrap();
     assert_eq!(cpu.bp, 0x123);
@@ -902,16 +908,16 @@ fn get_sp() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::GetSp.into()]);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u64>(), cpu.bp);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u8>(0);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u64>(), cpu.bp - 1);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u16>(0);
     cpu.execute().unwrap();
     assert_eq!(cpu.stack_pop::<u64>(), cpu.bp - 2);
@@ -925,14 +931,14 @@ fn set_sp() {
     mem.write(0x500, 0xAA).unwrap();
     mem.write(0x123, 0xBB).unwrap();
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u64>(0x500);
     cpu.execute().unwrap();
     assert_eq!(cpu.sp, 0x500);
     assert_eq!(cpu.stack_pop::<u8>(), 0xAA);
     assert_eq!(cpu.sp, 0x500 + 1);
 
-    let mut cpu = Cpu::new(mem.clone());
+    let mut cpu = new_cpu(mem.clone());
     cpu.stack_push::<u64>(0x123);
     cpu.execute().unwrap();
     assert_eq!(cpu.sp, 0x123);
@@ -944,7 +950,7 @@ fn set_sp() {
 fn abort() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Abort.into()]);
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     assert!(cpu.execute().is_err());
 }
 
@@ -961,7 +967,7 @@ fn debug_comment() {
             TextElem::Data(s.as_bytes().to_vec()),
         ],
     );
-    let mut cpu = Cpu::new(mem);
+    let mut cpu = new_cpu(mem);
     cpu.execute().unwrap();
     assert_eq!(cpu.ip, 2 + s.len() as u64);
 }

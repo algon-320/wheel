@@ -1,0 +1,52 @@
+let serial_data: *u8 = 0x8000000000000000 as *u8;
+let serial_status: *u8 = 0x8000000000000001 as *u8;
+fn serial_write(c: u8) -> () {
+    loop {
+        // TODO: use bitwise operations
+        if *serial_status == 1_u8 || *serial_status == 3_u8 {
+            *serial_data = c;
+            break;
+        }
+    }
+}
+fn serial_read() -> u8 {
+    loop {
+        // TODO: use bitwise operations
+        if *serial_status == 2_u8 || *serial_status == 3_u8 {
+            return *serial_data;
+        }
+    }
+    0_u8
+}
+fn serial_wait_complete() -> () {
+    loop {
+        if *serial_status == 1_u8 || *serial_status == 3_u8 {
+            return ()
+        }
+    }
+}
+
+fn main() -> u64 {
+    // text
+    let s = "Hello, World!\nこんにちは\n";
+    for let i = 0; i < s.len; i += 1 {
+        serial_write(s[i]);
+    }
+
+    // // binary
+    // serial_write(0xDE_u08);
+    // serial_write(0xAD_u08);
+    // serial_write(0xBE_u08);
+    // serial_write(0xEF_u08);
+
+    // // echo
+    // let b1 = serial_read();
+    // let b2 = serial_read();
+    // let b3 = serial_read();
+    // serial_write(b1);
+    // serial_write(b2);
+    // serial_write(b3);
+
+    serial_wait_complete();
+    0
+}

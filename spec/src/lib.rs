@@ -73,6 +73,11 @@ impl From<u8> for Instruction {
     }
 }
 
+#[repr(u64)]
+pub enum MmioBase {
+    BasicSerial = 0x8000_0000_0000_0000,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

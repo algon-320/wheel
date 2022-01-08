@@ -1,4 +1,5 @@
 mod cpu;
+mod device;
 mod memory;
 mod num;
 
@@ -25,6 +26,7 @@ struct CliOpt {
 }
 
 use cpu::Cpu;
+use device::basic_serial::BasicSerial;
 use memory::Memory;
 
 fn main() {
@@ -39,7 +41,12 @@ fn main() {
         mem.write(i as u64, byte).unwrap();
     }
 
-    let mut cpu = Cpu::new(mem);
+    let serial = BasicSerial::new();
+
+    let mut cpu = Cpu::new(mem, serial);
+
+    eprintln!("================================");
+
     while cpu.execute().is_ok() {
         if opt.debug {
             debug_repl(&mut cpu);
@@ -47,6 +54,7 @@ fn main() {
     }
 
     // FIXME: not necessarily the return value is 64-bit
+    eprintln!("================================");
     println!("{}", cpu.inspect_stack::<u64>());
 }
 
