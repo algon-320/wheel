@@ -329,7 +329,7 @@ impl Cpu {
         let cond = self.stack_pop::<u8>();
         let addr = self.stack_pop::<u64>();
         trace!("jump_if: cond={}, addr={}", cond, addr);
-        if cond != 0 {
+        if (cond & 1) == 1 {
             self.ip = addr;
         }
     }

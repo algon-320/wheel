@@ -438,8 +438,8 @@ jump_if:
   movb  (%rsp), %bl
   incq  %rsp
   popq  %rax
-  cmpb  $0, %bl
-  je    jump_if_cont
+  andb  $1, %bl
+  jz    jump_if_cont
   movq  %rax, %r11
   addq  %rdi, %r11
   jmp   eval
