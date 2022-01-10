@@ -2,8 +2,7 @@ let serial_data: *u8 = 0x8000000000000000 as *u8;
 let serial_status: *u8 = 0x8000000000000001 as *u8;
 fn serial_write(c: u8) -> () {
     loop {
-        // TODO: use bitwise operations
-        if *serial_status == 1_u8 || *serial_status == 3_u8 {
+        if (*serial_status & 1_u8) == 1_u8 {
             *serial_data = c;
             break;
         }
@@ -11,8 +10,7 @@ fn serial_write(c: u8) -> () {
 }
 fn serial_read() -> u8 {
     loop {
-        // TODO: use bitwise operations
-        if *serial_status == 2_u8 || *serial_status == 3_u8 {
+        if (*serial_status & 2_u8) == 2_u8 {
             return *serial_data;
         }
     }
@@ -20,7 +18,7 @@ fn serial_read() -> u8 {
 }
 fn serial_wait_complete() -> () {
     loop {
-        if *serial_status == 1_u8 || *serial_status == 3_u8 {
+        if (*serial_status & 1_u8) == 1_u8 {
             return ()
         }
     }
