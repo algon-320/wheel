@@ -1311,14 +1311,11 @@ impl Compiler {
             }
 
             LNot(e) => {
-                // top == 0
                 self.compile_expr(e)?;
-                self.emit(I::Lit08);
-                self.emit(0_u8);
-                self.emit(I::Eq08);
+                self.emit(I::Not08);
             }
             Neq(lhs, rhs) => {
-                // Eq(lhs, rhs) == 0
+                // LNot(Eq(lhs, rhs))
                 self.compile_expr(
                     TypedExpr {
                         e: Eq(lhs, rhs),
@@ -1327,12 +1324,10 @@ impl Compiler {
                     }
                     .into(),
                 )?;
-                self.emit(I::Lit08);
-                self.emit(0_u8);
-                self.emit(I::Eq08);
+                self.emit(I::Not08);
             }
             Leq(lhs, rhs) => {
-                // Gt(lhs, rhs) == 0
+                // LNot(Gt(lhs, rhs))
                 self.compile_expr(
                     TypedExpr {
                         e: Gt(lhs, rhs),
@@ -1346,7 +1341,7 @@ impl Compiler {
                 self.emit(I::Eq08);
             }
             Geq(lhs, rhs) => {
-                // Lt(lhs, rhs) == 0
+                // LNot(Lt(lhs, rhs))
                 self.compile_expr(
                     TypedExpr {
                         e: Lt(lhs, rhs),
@@ -1355,24 +1350,17 @@ impl Compiler {
                     }
                     .into(),
                 )?;
-                self.emit(I::Lit08);
-                self.emit(0_u8);
-                self.emit(I::Eq08);
+                self.emit(I::Not08);
             }
             LAnd(lhs, rhs) => {
                 self.compile_expr(lhs)?;
                 self.compile_expr(rhs)?;
-                self.emit(I::Mul08);
+                self.emit(I::And08);
             }
             LOr(lhs, rhs) => {
                 self.compile_expr(lhs)?;
                 self.compile_expr(rhs)?;
-
-                // lhs + rhs > 0
-                self.emit(I::Add08);
-                self.emit(I::Lit08);
-                self.emit(0_u8);
-                self.emit(I::Gt08);
+                self.emit(I::Or08);
             }
 
             Call { func, args } => {
@@ -1600,9 +1588,7 @@ impl Compiler {
 
                         // negate
                         self.compile_expr(cond)?;
-                        self.emit(I::Lit08);
-                        self.emit(0_u8);
-                        self.emit(I::Eq08);
+                        self.emit(I::Not08);
 
                         self.emit(I::JumpIf);
                     }
@@ -1652,9 +1638,7 @@ impl Compiler {
                         self.emit(Ir::Pointer(cont));
 
                         self.compile_expr(cond)?;
-                        self.emit(I::Lit08);
-                        self.emit(0_u8);
-                        self.emit(I::Eq08);
+                        self.emit(I::Not08);
 
                         self.emit(I::JumpIf);
                     }
