@@ -34,6 +34,10 @@ pub trait Int:
     + std::ops::Sub<Output = Self>
     + std::ops::Mul<Output = Self>
     + std::ops::Div<Output = Self>
+    + std::ops::BitAnd<Output = Self>
+    + std::ops::BitOr<Output = Self>
+    + std::ops::BitXor<Output = Self>
+    + std::ops::Not<Output = Self>
     + WrappingAdd
     + WrappingMul
     + WrappingSub
@@ -50,6 +54,10 @@ impl<T> Int for T where
         + std::ops::Sub<Output = Self>
         + std::ops::Mul<Output = Self>
         + std::ops::Div<Output = Self>
+        + std::ops::BitAnd<Output = Self>
+        + std::ops::BitOr<Output = Self>
+        + std::ops::BitXor<Output = Self>
+        + std::ops::Not<Output = Self>
         + WrappingAdd
         + WrappingMul
         + WrappingSub

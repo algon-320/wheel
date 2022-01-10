@@ -452,6 +452,178 @@ fn div64() {
 }
 
 #[test]
+fn and08() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::And08.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u8>(0b00110011);
+    cpu.stack_push::<u8>(0b01010101);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u8>(), 0b00010001);
+}
+
+#[test]
+fn and16() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::And16.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u16>(0b0011001100110011);
+    cpu.stack_push::<u16>(0b0101010101010101);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u16>(), 0b0001000100010001);
+}
+
+#[test]
+fn and32() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::And32.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u32>(0x33333333);
+    cpu.stack_push::<u32>(0x55555555);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u32>(), 0x11111111);
+}
+
+#[test]
+fn and64() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::And64.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u64>(0x3333333333333333);
+    cpu.stack_push::<u64>(0x5555555555555555);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u64>(), 0x1111111111111111);
+}
+
+#[test]
+fn or08() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Or08.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u8>(0b00110011);
+    cpu.stack_push::<u8>(0b01010101);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u8>(), 0b01110111);
+}
+
+#[test]
+fn or16() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Or16.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u16>(0b0011001100110011);
+    cpu.stack_push::<u16>(0b0101010101010101);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u16>(), 0b0111011101110111);
+}
+
+#[test]
+fn or32() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Or32.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u32>(0x33333333);
+    cpu.stack_push::<u32>(0x55555555);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u32>(), 0x77777777);
+}
+
+#[test]
+fn or64() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Or64.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u64>(0x3333333333333333);
+    cpu.stack_push::<u64>(0x5555555555555555);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u64>(), 0x7777777777777777);
+}
+
+#[test]
+fn xor08() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Xor08.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u8>(0b00110011);
+    cpu.stack_push::<u8>(0b01010101);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u8>(), 0b01100110);
+}
+
+#[test]
+fn xor16() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Xor16.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u16>(0b0011001100110011);
+    cpu.stack_push::<u16>(0b0101010101010101);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u16>(), 0b0110011001100110);
+}
+
+#[test]
+fn xor32() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Xor32.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u32>(0x33333333);
+    cpu.stack_push::<u32>(0x55555555);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u32>(), 0x66666666);
+}
+
+#[test]
+fn xor64() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Xor64.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u64>(0x3333333333333333);
+    cpu.stack_push::<u64>(0x5555555555555555);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u64>(), 0x6666666666666666);
+}
+
+#[test]
+fn not08() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Not08.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u8>(0b01010101);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u8>(), 0b10101010);
+}
+
+#[test]
+fn not16() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Not16.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u16>(0b0101010101010101);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u16>(), 0b1010101010101010);
+}
+
+#[test]
+fn not32() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Not32.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u32>(0x55555555);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u32>(), 0xAAAAAAAA);
+}
+
+#[test]
+fn not64() {
+    let mut mem = Memory::new(0x1000);
+    write_text(&mut mem, 0, &[I::Not64.into()]);
+    let mut cpu = new_cpu(mem);
+    cpu.stack_push::<u64>(0x5555555555555555);
+    cpu.execute().unwrap();
+    assert_eq!(cpu.stack_pop::<u64>(), 0xAAAAAAAAAAAAAAAA);
+}
+
+#[test]
 fn eq08() {
     let mut mem = Memory::new(0x1000);
     write_text(&mut mem, 0, &[I::Eq08.into(), I::Eq08.into()]);

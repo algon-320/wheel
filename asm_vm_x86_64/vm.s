@@ -171,6 +171,103 @@ div64:
   pushq %rax
   jmp   eval
 
+and08:
+  popw  %bx
+  movw  %bx, %ax
+  andb  %bl, %ah
+  decq  %rsp
+  movb  %ah, (%rsp)
+  jmp   eval
+and16:
+  popw  %bx
+  popw  %ax
+  andw  %bx, %ax
+  pushw %ax
+  jmp   eval
+and32:
+  popq  %rbx
+  movq  %rbx, %rax
+  shrq  $32,  %rax
+  andl  %ebx, %eax
+  subq  $4, %rsp
+  movl  %eax, (%rsp)
+  jmp   eval
+and64:
+  popq  %rbx
+  popq  %rax
+  andq  %rbx, %rax
+  pushq %rax
+  jmp   eval
+
+or08:
+  popw  %bx
+  movw  %bx, %ax
+  orb  %bl, %ah
+  decq  %rsp
+  movb  %ah, (%rsp)
+  jmp   eval
+or16:
+  popw  %bx
+  popw  %ax
+  orw  %bx, %ax
+  pushw %ax
+  jmp   eval
+or32:
+  popq  %rbx
+  movq  %rbx, %rax
+  shrq  $32,  %rax
+  orl  %ebx, %eax
+  subq  $4, %rsp
+  movl  %eax, (%rsp)
+  jmp   eval
+or64:
+  popq  %rbx
+  popq  %rax
+  orq  %rbx, %rax
+  pushq %rax
+  jmp   eval
+
+xor08:
+  popw  %bx
+  movw  %bx, %ax
+  xorb  %bl, %ah
+  decq  %rsp
+  movb  %ah, (%rsp)
+  jmp   eval
+xor16:
+  popw  %bx
+  popw  %ax
+  xorw  %bx, %ax
+  pushw %ax
+  jmp   eval
+xor32:
+  popq  %rbx
+  movq  %rbx, %rax
+  shrq  $32,  %rax
+  xorl  %ebx, %eax
+  subq  $4, %rsp
+  movl  %eax, (%rsp)
+  jmp   eval
+xor64:
+  popq  %rbx
+  popq  %rax
+  xorq  %rbx, %rax
+  pushq %rax
+  jmp   eval
+
+not08:
+  notb  (%rsp)
+  jmp   eval
+not16:
+  notw  (%rsp)
+  jmp   eval
+not32:
+  notl  (%rsp)
+  jmp   eval
+not64:
+  notq  (%rsp)
+  jmp   eval
+
 eq08:
   popw  %bx
   movw  %bx, %ax
@@ -475,6 +572,54 @@ vm_main:
   movq  %rbx, (%rax)
   addq  $8, %rax
   lea   div64(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   and08(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   and16(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   and32(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   and64(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   or08(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   or16(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   or32(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   or64(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   xor08(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   xor16(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   xor32(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   xor64(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   not08(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   not16(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   not32(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   not64(%rip), %rbx
   movq  %rbx, (%rax)
   addq  $8, %rax
   lea   eq08(%rip), %rbx

@@ -100,6 +100,22 @@ impl Cpu {
             Div16 => self.div::<u16>(),
             Div32 => self.div::<u32>(),
             Div64 => self.div::<u64>(),
+            And08 => self.bit_and::<u8>(),
+            And16 => self.bit_and::<u16>(),
+            And32 => self.bit_and::<u32>(),
+            And64 => self.bit_and::<u64>(),
+            Or08 => self.bit_or::<u8>(),
+            Or16 => self.bit_or::<u16>(),
+            Or32 => self.bit_or::<u32>(),
+            Or64 => self.bit_or::<u64>(),
+            Xor08 => self.bit_xor::<u8>(),
+            Xor16 => self.bit_xor::<u16>(),
+            Xor32 => self.bit_xor::<u32>(),
+            Xor64 => self.bit_xor::<u64>(),
+            Not08 => self.bit_not::<u8>(),
+            Not16 => self.bit_not::<u16>(),
+            Not32 => self.bit_not::<u32>(),
+            Not64 => self.bit_not::<u64>(),
             Eq08 => self.eq::<u8>(),
             Eq16 => self.eq::<u16>(),
             Eq32 => self.eq::<u32>(),
@@ -211,6 +227,37 @@ impl Cpu {
         let lhs = self.stack_pop::<T>();
         trace!("div: lhs={}, rhs={}", lhs, rhs);
         self.stack_push::<T>(lhs / rhs);
+    }
+
+    #[inline]
+    fn bit_and<T: Int>(&mut self) {
+        let rhs = self.stack_pop::<T>();
+        let lhs = self.stack_pop::<T>();
+        trace!("and: lhs={}, rhs={}", lhs, rhs);
+        self.stack_push::<T>(lhs & rhs);
+    }
+
+    #[inline]
+    fn bit_or<T: Int>(&mut self) {
+        let rhs = self.stack_pop::<T>();
+        let lhs = self.stack_pop::<T>();
+        trace!("or: lhs={}, rhs={}", lhs, rhs);
+        self.stack_push::<T>(lhs | rhs);
+    }
+
+    #[inline]
+    fn bit_xor<T: Int>(&mut self) {
+        let rhs = self.stack_pop::<T>();
+        let lhs = self.stack_pop::<T>();
+        trace!("xor: lhs={}, rhs={}", lhs, rhs);
+        self.stack_push::<T>(lhs ^ rhs);
+    }
+
+    #[inline]
+    fn bit_not<T: Int>(&mut self) {
+        let val = self.stack_pop::<T>();
+        trace!("not: val={}", val);
+        self.stack_push::<T>(!val);
     }
 
     #[inline]
