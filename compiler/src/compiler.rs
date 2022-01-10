@@ -1254,6 +1254,73 @@ impl Compiler {
                 }
             }
 
+            BitAnd(lhs, rhs) => {
+                self.compile_expr(lhs)?;
+                self.compile_expr(rhs)?;
+                match expr_ty.0 {
+                    Type::Void
+                    | Type::Bool
+                    | Type::Array(_, _)
+                    | Type::Slice { .. }
+                    | Type::Struct { .. }
+                    | Type::Ptr(_) => todo!(),
+                    Type::U08 => self.emit(I::And08),
+                    Type::U16 => self.emit(I::And16),
+                    Type::U32 => self.emit(I::And32),
+                    Type::U64 => self.emit(I::And64),
+                    Type::Func { .. } => unimplemented!(),
+                }
+            }
+            BitOr(lhs, rhs) => {
+                self.compile_expr(lhs)?;
+                self.compile_expr(rhs)?;
+                match expr_ty.0 {
+                    Type::Void
+                    | Type::Bool
+                    | Type::Array(_, _)
+                    | Type::Slice { .. }
+                    | Type::Struct { .. }
+                    | Type::Ptr(_) => todo!(),
+                    Type::U08 => self.emit(I::Or08),
+                    Type::U16 => self.emit(I::Or16),
+                    Type::U32 => self.emit(I::Or32),
+                    Type::U64 => self.emit(I::Or64),
+                    Type::Func { .. } => unimplemented!(),
+                }
+            }
+            BitXor(lhs, rhs) => {
+                self.compile_expr(lhs)?;
+                self.compile_expr(rhs)?;
+                match expr_ty.0 {
+                    Type::Void
+                    | Type::Bool
+                    | Type::Array(_, _)
+                    | Type::Slice { .. }
+                    | Type::Struct { .. }
+                    | Type::Ptr(_) => todo!(),
+                    Type::U08 => self.emit(I::Xor08),
+                    Type::U16 => self.emit(I::Xor16),
+                    Type::U32 => self.emit(I::Xor32),
+                    Type::U64 => self.emit(I::Xor64),
+                    Type::Func { .. } => unimplemented!(),
+                }
+            }
+            BitNot(e) => {
+                self.compile_expr(e)?;
+                match expr_ty.0 {
+                    Type::Void
+                    | Type::Array(_, _)
+                    | Type::Slice { .. }
+                    | Type::Struct { .. }
+                    | Type::Ptr(_) => todo!(),
+                    Type::Bool | Type::U08 => self.emit(I::Not08),
+                    Type::U16 => self.emit(I::Not16),
+                    Type::U32 => self.emit(I::Not32),
+                    Type::U64 => self.emit(I::Not64),
+                    Type::Func { .. } => unimplemented!(),
+                }
+            }
+
             Eq(lhs, rhs) => {
                 let ty = lhs.ty.clone();
                 self.compile_expr(lhs)?;
@@ -1310,12 +1377,8 @@ impl Compiler {
                 }
             }
 
-            LNot(e) => {
-                self.compile_expr(e)?;
-                self.emit(I::Not08);
-            }
             Neq(lhs, rhs) => {
-                // LNot(Eq(lhs, rhs))
+                // BitNot(Eq(lhs, rhs))
                 self.compile_expr(
                     TypedExpr {
                         e: Eq(lhs, rhs),
@@ -1327,7 +1390,7 @@ impl Compiler {
                 self.emit(I::Not08);
             }
             Leq(lhs, rhs) => {
-                // LNot(Gt(lhs, rhs))
+                // BitNot(Gt(lhs, rhs))
                 self.compile_expr(
                     TypedExpr {
                         e: Gt(lhs, rhs),
@@ -1341,7 +1404,7 @@ impl Compiler {
                 self.emit(I::Eq08);
             }
             Geq(lhs, rhs) => {
-                // LNot(Lt(lhs, rhs))
+                // BitNot(Lt(lhs, rhs))
                 self.compile_expr(
                     TypedExpr {
                         e: Lt(lhs, rhs),
@@ -1826,6 +1889,100 @@ impl Compiler {
                     Type::U64 => {
                         self.emit(I::Load64);
                         self.emit(I::Div64);
+                    }
+                    _ => todo!(),
+                }
+
+                self.compile_expr(location)?;
+                if ty.size_of() > 0 {
+                    self.generate_store(ty.size_of());
+                }
+            }
+
+            AssignBitAnd { location, value } => {
+                assert_eq!(location.cat, Category::Location);
+                let ty = value.ty.clone();
+
+                self.compile_expr(value)?;
+                self.compile_expr(location.clone())?;
+                match ty.0 {
+                    Type::U08 => {
+                        self.emit(I::Load08);
+                        self.emit(I::And08);
+                    }
+                    Type::U16 => {
+                        self.emit(I::Load16);
+                        self.emit(I::And16);
+                    }
+                    Type::U32 => {
+                        self.emit(I::Load32);
+                        self.emit(I::And32);
+                    }
+                    Type::U64 => {
+                        self.emit(I::Load64);
+                        self.emit(I::And64);
+                    }
+                    _ => todo!(),
+                }
+
+                self.compile_expr(location)?;
+                if ty.size_of() > 0 {
+                    self.generate_store(ty.size_of());
+                }
+            }
+            AssignBitOr { location, value } => {
+                assert_eq!(location.cat, Category::Location);
+                let ty = value.ty.clone();
+
+                self.compile_expr(value)?;
+                self.compile_expr(location.clone())?;
+                match ty.0 {
+                    Type::U08 => {
+                        self.emit(I::Load08);
+                        self.emit(I::Or08);
+                    }
+                    Type::U16 => {
+                        self.emit(I::Load16);
+                        self.emit(I::Or16);
+                    }
+                    Type::U32 => {
+                        self.emit(I::Load32);
+                        self.emit(I::Or32);
+                    }
+                    Type::U64 => {
+                        self.emit(I::Load64);
+                        self.emit(I::Or64);
+                    }
+                    _ => todo!(),
+                }
+
+                self.compile_expr(location)?;
+                if ty.size_of() > 0 {
+                    self.generate_store(ty.size_of());
+                }
+            }
+            AssignBitXor { location, value } => {
+                assert_eq!(location.cat, Category::Location);
+                let ty = value.ty.clone();
+
+                self.compile_expr(value)?;
+                self.compile_expr(location.clone())?;
+                match ty.0 {
+                    Type::U08 => {
+                        self.emit(I::Load08);
+                        self.emit(I::Xor08);
+                    }
+                    Type::U16 => {
+                        self.emit(I::Load16);
+                        self.emit(I::Xor16);
+                    }
+                    Type::U32 => {
+                        self.emit(I::Load32);
+                        self.emit(I::Xor32);
+                    }
+                    Type::U64 => {
+                        self.emit(I::Load64);
+                        self.emit(I::Xor64);
                     }
                     _ => todo!(),
                 }

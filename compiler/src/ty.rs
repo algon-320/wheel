@@ -537,12 +537,21 @@ impl TypeChecker {
                 }
             }
 
-            Add(_, _) | Sub(_, _) | Mul(_, _) | Div(_, _) => {
+            Add(_, _)
+            | Sub(_, _)
+            | Mul(_, _)
+            | Div(_, _)
+            | BitAnd(_, _)
+            | BitOr(_, _)
+            | BitXor(_, _) => {
                 let (ctor, lhs, rhs): (BinCtor, _, _) = match expr.e {
                     Add(l, r) => (Add, l, r),
                     Sub(l, r) => (Sub, l, r),
                     Mul(l, r) => (Mul, l, r),
                     Div(l, r) => (Div, l, r),
+                    BitAnd(l, r) => (BitAnd, l, r),
+                    BitOr(l, r) => (BitOr, l, r),
+                    BitXor(l, r) => (BitXor, l, r),
                     _ => unreachable!(),
                 };
 
@@ -557,6 +566,16 @@ impl TypeChecker {
                 }
 
                 wrap(ctor(lhs, rhs), ty)
+            }
+
+            BitNot(val) => {
+                let val = self.type_expr(val, Category::Regular)?;
+                let ty = val.ty.clone();
+                match &ty.0 {
+                    Type::Bool | Type::U08 | Type::U16 | Type::U32 | Type::U64 => {}
+                    _ => todo!(),
+                }
+                wrap(BitNot(val), ty)
             }
 
             Eq(_, _) | Neq(_, _) | Lt(_, _) | Gt(_, _) | Leq(_, _) | Geq(_, _) => {
@@ -593,11 +612,6 @@ impl TypeChecker {
                 assert_type_eq(&lhs.ty, &Type::Bool.into())?;
                 assert_type_eq(&rhs.ty, &Type::Bool.into())?;
                 wrap(ctor(lhs, rhs), Type::Bool.into())
-            }
-            LNot(cond) => {
-                let cond = self.type_expr(cond, Category::Regular)?;
-                assert_type_eq(&cond.ty, &Type::Bool.into())?;
-                wrap(LNot(cond), Type::Bool.into())
             }
 
             Call { func, args } => {
@@ -764,6 +778,25 @@ impl TypeChecker {
                 let value = self.type_expr(value, Category::Regular)?;
                 assert_type_eq(&location.ty, &value.ty)?;
                 wrap(AssignDiv { location, value }, Type::Void.into())
+            }
+
+            AssignBitAnd { location, value } => {
+                let location = self.type_expr(location, Category::Location)?;
+                let value = self.type_expr(value, Category::Regular)?;
+                assert_type_eq(&location.ty, &value.ty)?;
+                wrap(AssignBitAnd { location, value }, Type::Void.into())
+            }
+            AssignBitOr { location, value } => {
+                let location = self.type_expr(location, Category::Location)?;
+                let value = self.type_expr(value, Category::Regular)?;
+                assert_type_eq(&location.ty, &value.ty)?;
+                wrap(AssignBitOr { location, value }, Type::Void.into())
+            }
+            AssignBitXor { location, value } => {
+                let location = self.type_expr(location, Category::Location)?;
+                let value = self.type_expr(value, Category::Regular)?;
+                assert_type_eq(&location.ty, &value.ty)?;
+                wrap(AssignBitXor { location, value }, Type::Void.into())
             }
 
             Block(exprs) => {

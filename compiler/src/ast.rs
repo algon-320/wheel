@@ -85,12 +85,16 @@ pub enum Expr<E: ExprBound, T: TypeBound> {
     Mul(Box<E>, Box<E>),
     Div(Box<E>, Box<E>),
 
+    BitAnd(Box<E>, Box<E>),
+    BitOr(Box<E>, Box<E>),
+    BitXor(Box<E>, Box<E>),
+    BitNot(Box<E>),
+
     Eq(Box<E>, Box<E>),
     Neq(Box<E>, Box<E>),
     Lt(Box<E>, Box<E>),
     Gt(Box<E>, Box<E>),
 
-    LNot(Box<E>),
     Leq(Box<E>, Box<E>),
     Geq(Box<E>, Box<E>),
     LAnd(Box<E>, Box<E>),
@@ -146,6 +150,19 @@ pub enum Expr<E: ExprBound, T: TypeBound> {
         value: Box<E>,
     },
     AssignDiv {
+        location: Box<E>,
+        value: Box<E>,
+    },
+
+    AssignBitAnd {
+        location: Box<E>,
+        value: Box<E>,
+    },
+    AssignBitOr {
+        location: Box<E>,
+        value: Box<E>,
+    },
+    AssignBitXor {
         location: Box<E>,
         value: Box<E>,
     },

@@ -55,6 +55,7 @@ enum Token {
     Gt,
     And,
     Pipe,
+    Caret,
     Bang,
     Ident(String),
     U08(String, Base),
@@ -89,7 +90,8 @@ peg::parser! { grammar tokenizer() for str {
             let_() / as_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
             at() / dot() / colon() / semicolon() / comma() / equal() / lt() / gt() /
-            and() / pipe() / bang() / ident() / integer() / utf8_string() / ascii_char()
+            and() / pipe() / caret() / bang() /
+            ident() / integer() / utf8_string() / ascii_char()
           ) end:position!()
           (ws() / comment())*
           { PosToken { t: tok, begin, end } }
@@ -130,6 +132,7 @@ peg::parser! { grammar tokenizer() for str {
     rule gt() -> Token = ">" { Token::Gt }
     rule and() -> Token = "&" { Token::And }
     rule pipe() -> Token = "|" { Token::Pipe }
+    rule caret() -> Token = "^" { Token::Caret }
     rule bang() -> Token = "!" { Token::Bang }
 
     rule alnum_() = quiet!{['a'..='z'|'A'..='Z'|'0'..='9'|'_']}
@@ -261,13 +264,23 @@ peg::parser! { pub grammar parser() for [Token] {
                 { wrap(Expr::AssignMul { location, value }) }
             location:(@) [Slash] [Equal] value:@
                 { wrap(Expr::AssignDiv { location, value }) }
+            location:(@) [And] [Equal] value:@
+                { wrap(Expr::AssignBitAnd { location, value }) }
+            location:(@) [Pipe] [Equal] value:@
+                { wrap(Expr::AssignBitOr { location, value }) }
+            location:(@) [Caret] [Equal] value:@
+                { wrap(Expr::AssignBitXor { location, value }) }
             --
             [Return] e:@              { wrap(Expr::Return(e)) }
             --
             l:(@) [Pipe] [Pipe] r:@   { wrap(Expr::LOr(l, r)) }
             l:(@) [And] [And] r:@     { wrap(Expr::LAnd(l, r)) }
             --
-            [Bang] e:@                { wrap(Expr::LNot(e)) }
+            l:(@) [Pipe] r:@          { wrap(Expr::BitOr(l, r)) }
+            --
+            l:(@) [Caret] r:@         { wrap(Expr::BitXor(l, r)) }
+            --
+            l:(@) [And] r:@           { wrap(Expr::BitAnd(l, r)) }
             --
             l:(@) [Equal] [Equal] r:@ { wrap(Expr::Eq(l, r)) }
             l:(@) [Bang] [Equal]  r:@ { wrap(Expr::Neq(l, r)) }
@@ -285,6 +298,7 @@ peg::parser! { pub grammar parser() for [Token] {
             --
             e:literal_slice_from_array() { e }
             --
+            [Bang] e:@ { wrap(Expr::BitNot(e)) }
             [Star] e:@ { wrap(Expr::PtrDeref(e)) }
             [And]  e:@ { wrap(Expr::AddrOf(e)) }
             --
