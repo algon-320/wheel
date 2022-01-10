@@ -36,7 +36,7 @@ pub fn disas(bin: &[u8]) -> String {
     while let Some((addr, b)) = iter.next() {
         // FIXME: Ignore static data
         if b == 0xbb {
-            continue;
+            break;
         }
 
         let op = I::from(b);
