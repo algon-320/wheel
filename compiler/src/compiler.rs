@@ -1778,23 +1778,26 @@ impl Compiler {
                 assert_eq!(location.cat, Category::Location);
                 let ty = value.ty.clone();
 
-                self.compile_expr(value)?;
                 self.compile_expr(location.clone())?;
                 match ty.0 {
                     Type::U08 => {
                         self.emit(I::Load08);
+                        self.compile_expr(value)?;
                         self.emit(I::Add08);
                     }
                     Type::U16 => {
                         self.emit(I::Load16);
+                        self.compile_expr(value)?;
                         self.emit(I::Add16);
                     }
                     Type::U32 => {
                         self.emit(I::Load32);
+                        self.compile_expr(value)?;
                         self.emit(I::Add32);
                     }
                     Type::U64 => {
                         self.emit(I::Load64);
+                        self.compile_expr(value)?;
                         self.emit(I::Add64);
                     }
                     _ => todo!(),
@@ -1809,23 +1812,26 @@ impl Compiler {
                 assert_eq!(location.cat, Category::Location);
                 let ty = value.ty.clone();
 
-                self.compile_expr(value)?;
                 self.compile_expr(location.clone())?;
                 match ty.0 {
                     Type::U08 => {
                         self.emit(I::Load08);
+                        self.compile_expr(value)?;
                         self.emit(I::Sub08);
                     }
                     Type::U16 => {
                         self.emit(I::Load16);
+                        self.compile_expr(value)?;
                         self.emit(I::Sub16);
                     }
                     Type::U32 => {
                         self.emit(I::Load32);
+                        self.compile_expr(value)?;
                         self.emit(I::Sub32);
                     }
                     Type::U64 => {
                         self.emit(I::Load64);
+                        self.compile_expr(value)?;
                         self.emit(I::Sub64);
                     }
                     _ => todo!(),
@@ -1840,23 +1846,26 @@ impl Compiler {
                 assert_eq!(location.cat, Category::Location);
                 let ty = value.ty.clone();
 
-                self.compile_expr(value)?;
                 self.compile_expr(location.clone())?;
                 match ty.0 {
                     Type::U08 => {
                         self.emit(I::Load08);
+                        self.compile_expr(value)?;
                         self.emit(I::Mul08);
                     }
                     Type::U16 => {
                         self.emit(I::Load16);
+                        self.compile_expr(value)?;
                         self.emit(I::Mul16);
                     }
                     Type::U32 => {
                         self.emit(I::Load32);
+                        self.compile_expr(value)?;
                         self.emit(I::Mul32);
                     }
                     Type::U64 => {
                         self.emit(I::Load64);
+                        self.compile_expr(value)?;
                         self.emit(I::Mul64);
                     }
                     _ => todo!(),
@@ -1871,23 +1880,26 @@ impl Compiler {
                 assert_eq!(location.cat, Category::Location);
                 let ty = value.ty.clone();
 
-                self.compile_expr(value)?;
                 self.compile_expr(location.clone())?;
                 match ty.0 {
                     Type::U08 => {
                         self.emit(I::Load08);
+                        self.compile_expr(value)?;
                         self.emit(I::Div08);
                     }
                     Type::U16 => {
                         self.emit(I::Load16);
+                        self.compile_expr(value)?;
                         self.emit(I::Div16);
                     }
                     Type::U32 => {
                         self.emit(I::Load32);
+                        self.compile_expr(value)?;
                         self.emit(I::Div32);
                     }
                     Type::U64 => {
                         self.emit(I::Load64);
+                        self.compile_expr(value)?;
                         self.emit(I::Div64);
                     }
                     _ => todo!(),
