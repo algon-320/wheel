@@ -1,7 +1,8 @@
 use num_derive::FromPrimitive;
+use strum::{Display, EnumString};
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, FromPrimitive, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, FromPrimitive, PartialEq, Eq, EnumString, Display)]
 pub enum Instruction {
     Nop = 0,
     Lit08 = 1,
