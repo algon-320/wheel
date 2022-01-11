@@ -689,19 +689,10 @@ impl Compiler {
             self.emit(I::GetBp);
             self.emit(I::SetSp);
 
-            // Retrieve the return address
-            self.emit(I::GetBp);
-            self.emit(I::Lit64);
-            self.emit(8_u64);
-            self.emit(I::Add64);
-            {
-                // Restore BP
-                self.emit(I::GetBp);
-                self.emit(I::Load64);
-                self.emit(I::SetBp);
-            }
-            // Return to the caller
-            self.emit(I::Load64);
+            // Restore BP
+            self.emit(I::SetBp);
+
+            // Consume return IP
             self.emit(I::Jump);
         }
 
@@ -1526,17 +1517,13 @@ impl Compiler {
 
                 // [ ret val    ]
                 // [ local vars ]
-                // -------------- <-- SP
+                // --------------
                 // [ caller BP  ]
                 // [ return IP  ]
-                // [ args       ]
+                // [ args       ] <-- SP
                 // [ ret val    ]
                 // [ ********** ]
                 // -------------- <-- BP
-
-                // drop BP, and return addr
-                self.emit(I::Drop64);
-                self.emit(I::Drop64);
 
                 // drop arguments
                 for ty in params_ty.iter() {
