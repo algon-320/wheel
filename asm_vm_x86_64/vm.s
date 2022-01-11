@@ -469,6 +469,13 @@ get_sp:
   pushq %rax
   jmp   eval
 
+disable_intr:
+  // TODO
+  jmp   eval
+enable_intr:
+  // TODO
+  jmp   eval
+
 abort:
   jmp   exit
 
@@ -701,6 +708,12 @@ vm_main:
   movq  %rbx, (%rax)
   addq  $8, %rax
   lea   get_sp(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   disable_intr(%rip), %rbx
+  movq  %rbx, (%rax)
+  addq  $8, %rax
+  lea   enable_intr(%rip), %rbx
   movq  %rbx, (%rax)
   addq  $8, %rax
   lea   abort(%rip), %rbx

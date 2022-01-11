@@ -1,6 +1,9 @@
 use log::{debug, info, trace};
+use std::sync::atomic;
+use std::sync::Arc;
 
 use crate::device::basic_serial::BasicSerial;
+use crate::device::timer::Timer;
 use crate::memory::Memory;
 use crate::num::Int;
 use spec::Instruction;
@@ -9,28 +12,58 @@ pub struct Cpu {
     ip: u64,
     bp: u64,
     sp: u64,
+    intr_mask: bool,
+    irq: Arc<atomic::AtomicU8>,
+    ivt: Vec<u64>,
+
     mem: Memory,
     serial: BasicSerial,
 }
 
 impl Cpu {
     pub fn new(mem: Memory, serial: BasicSerial) -> Self {
+        let irq = Arc::new(atomic::AtomicU8::new(0));
+
+        Timer::new(irq.clone()); // FIXME
+
         Self {
             ip: 0,
             bp: mem.size() as u64,
             sp: mem.size() as u64,
+            intr_mask: false,
+            irq,
+            ivt: vec![0; 256],
+
             mem,
             serial,
         }
     }
 
     pub fn execute(&mut self) -> Result<(), ()> {
+        if self.intr_mask && self.irq.load(atomic::Ordering::Relaxed) != 0 {
+            return self.handle_interruption();
+        }
+
         let ip = self.ip;
         let opcode = self.bus_read(ip);
         let op = Instruction::from(opcode);
         self.ip += 1;
 
         self.eval(op)
+    }
+
+    #[inline]
+    fn handle_interruption(&mut self) -> Result<(), ()> {
+        let irq = self.irq.load(atomic::Ordering::SeqCst);
+        self.irq.store(0, atomic::Ordering::SeqCst);
+
+        self.stack_push::<u64>(self.ip);
+        self.stack_push::<u64>(self.bp);
+
+        self.bp = self.sp;
+        self.ip = self.ivt[irq as usize];
+        trace!("interruption {}: jump to {:016X}", irq, self.ip);
+        Ok(())
     }
 
     pub fn inspect_stack<T: Int>(&mut self) -> T {
@@ -47,9 +80,16 @@ impl Cpu {
             self.mem.write(addr, data).expect("mem write");
         } else {
             use spec::MmioBase;
+            const CPU_IVT_BASE: u64 = MmioBase::CpuIvt as u64;
+            const CPU_IVT_END: u64 = CPU_IVT_BASE + 0x10000;
             const SERIAL_BASE: u64 = MmioBase::BasicSerial as u64;
             const SERIAL_END: u64 = SERIAL_BASE + 2;
-            if SERIAL_BASE <= addr && addr < SERIAL_END {
+            if CPU_IVT_BASE <= addr && addr < CPU_IVT_END {
+                let irq = (addr & 0xFFFF) >> 8;
+                let sh = (addr & 0xFF) * 8;
+                self.ivt[irq as usize] &= !(0xFF << sh);
+                self.ivt[irq as usize] |= (data as u64) << sh;
+            } else if SERIAL_BASE <= addr && addr < SERIAL_END {
                 self.serial.write(addr, data).expect("serial write");
             }
         }
@@ -61,14 +101,30 @@ impl Cpu {
             self.mem.read(addr).expect("mem read")
         } else {
             use spec::MmioBase;
+            const CPU_IVT_BASE: u64 = MmioBase::CpuIvt as u64;
+            const CPU_IVT_END: u64 = CPU_IVT_BASE + 0x10000;
             const SERIAL_BASE: u64 = MmioBase::BasicSerial as u64;
             const SERIAL_END: u64 = SERIAL_BASE + 2;
-            if SERIAL_BASE <= addr && addr < SERIAL_END {
+            if CPU_IVT_BASE <= addr && addr < CPU_IVT_END {
+                let irq = (addr & 0xFFFF) >> 8;
+                let sh = (addr & 0xFF) * 8;
+                let v = self.ivt[irq as usize];
+                ((v >> sh) & 0xFF) as u8
+            } else if SERIAL_BASE <= addr && addr < SERIAL_END {
                 self.serial.read(addr).expect("serial read")
             } else {
                 panic!("invalid MMIO address");
             }
         }
+    }
+
+    fn set_intr_mask(&mut self, enable: bool) {
+        if enable {
+            trace!("interruption enabled");
+        } else {
+            trace!("interruption disabled");
+        }
+        self.intr_mask = enable;
     }
 
     fn eval(&mut self, inst: Instruction) -> Result<(), ()> {
@@ -143,6 +199,8 @@ impl Cpu {
             SetBp => self.set_bp(),
             GetSp => self.get_sp(),
             SetSp => self.set_sp(),
+            DisableIntr => self.set_intr_mask(false),
+            EnableIntr => self.set_intr_mask(true),
             Abort => {
                 info!("aborted");
                 info!("IP={} ({:016X})", self.ip, self.ip);

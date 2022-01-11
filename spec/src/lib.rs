@@ -72,7 +72,9 @@ pub enum Instruction {
     GetBp = 65,
     SetSp = 66,
     GetSp = 67,
-    Abort = 68,
+    DisableIntr = 68,
+    EnableIntr = 69,
+    Abort = 70,
 
     DebugComment = 0xF0,
 }
@@ -90,9 +92,15 @@ impl From<u8> for Instruction {
     }
 }
 
+#[repr(u8)]
+pub enum Irq {
+    Timer = 1,
+}
+
 #[repr(u64)]
 pub enum MmioBase {
-    BasicSerial = 0x8000_0000_0000_0000,
+    CpuIvt = 0x8000_0000_0000_0000,
+    BasicSerial = 0x8000_0000_0001_0000,
 }
 
 #[cfg(test)]
@@ -103,12 +111,76 @@ mod tests {
     fn op_ident() {
         use Instruction::*;
         let ops = [
-            Nop, Lit08, Lit16, Lit32, Lit64, Drop08, Drop16, Drop32, Drop64, Add08, Add16, Add32,
-            Add64, Sub08, Sub16, Sub32, Sub64, Mul08, Mul16, Mul32, Mul64, Div08, Div16, Div32,
-            Div64, And08, And16, And32, And64, Or08, Or16, Or32, Or64, Xor08, Xor16, Xor32, Xor64,
-            Not08, Not16, Not32, Not64, Eq08, Eq16, Eq32, Eq64, Lt08, Lt16, Lt32, Lt64, Gt08, Gt16,
-            Gt32, Gt64, Load08, Load16, Load32, Load64, Store08, Store16, Store32, Store64, Jump,
-            JumpIf, GetIp, SetBp, GetBp, GetSp, Abort,
+            Nop,
+            Lit08,
+            Lit16,
+            Lit32,
+            Lit64,
+            Drop08,
+            Drop16,
+            Drop32,
+            Drop64,
+            Add08,
+            Add16,
+            Add32,
+            Add64,
+            Sub08,
+            Sub16,
+            Sub32,
+            Sub64,
+            Mul08,
+            Mul16,
+            Mul32,
+            Mul64,
+            Div08,
+            Div16,
+            Div32,
+            Div64,
+            And08,
+            And16,
+            And32,
+            And64,
+            Or08,
+            Or16,
+            Or32,
+            Or64,
+            Xor08,
+            Xor16,
+            Xor32,
+            Xor64,
+            Not08,
+            Not16,
+            Not32,
+            Not64,
+            Eq08,
+            Eq16,
+            Eq32,
+            Eq64,
+            Lt08,
+            Lt16,
+            Lt32,
+            Lt64,
+            Gt08,
+            Gt16,
+            Gt32,
+            Gt64,
+            Load08,
+            Load16,
+            Load32,
+            Load64,
+            Store08,
+            Store16,
+            Store32,
+            Store64,
+            Jump,
+            JumpIf,
+            GetIp,
+            SetBp,
+            GetBp,
+            GetSp,
+            DisableIntr,
+            EnableIntr,
+            Abort,
         ];
         for op in ops {
             let code: u8 = op.into();

@@ -67,6 +67,8 @@ op_label = [
    "get_bp",
    "set_sp",
    "get_sp",
+   "disable_intr",
+   "enable_intr",
    "abort",
 ]
 

@@ -53,8 +53,8 @@ fn main() {
         }
     }
 
-    // FIXME: not necessarily the return value is 64-bit
     eprintln!("================================");
+    // FIXME: not necessarily the return value is 64-bit
     println!("{}", cpu.inspect_stack::<u64>());
 }
 
