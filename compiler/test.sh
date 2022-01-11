@@ -4,7 +4,9 @@ set -euf -o pipefail
 options="-g"
 stack_size=4096
 files=$(find examples -name '*.wheel')
+
 tmp_file=$(mktemp -t 'wheel-test-result.XXXXXXXXXX')
+trap '{ rm -f "$tmp_file"; }' EXIT
 
 echo "Compile Options: $options"
 
