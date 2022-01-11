@@ -1,0 +1,96 @@
+let serial_data: *u8 = 0x8000000000010000 as *u8;
+let serial_status: *u8 = 0x8000000000010001 as *u8;
+fn serial_write(c: u8) -> () {
+    loop {
+        if (*serial_status & 1_u8) == 1_u8 {
+            *serial_data = c;
+            break;
+        }
+    }
+}
+fn serial_read() -> u8 {
+    loop {
+        if (*serial_status & 2_u8) == 2_u8 {
+            return *serial_data;
+        }
+    }
+    0_u8
+}
+fn serial_wait_complete() -> () {
+    loop {
+        if (*serial_status & 1_u8) == 1_u8 {
+            return ()
+        }
+    }
+}
+
+fn print(msg: *[u8]) -> () {
+    for let i = 0; i < msg.len; i += 1 {
+        serial_write(msg[i]);
+    }
+    serial_wait_complete();
+}
+fn print_digit(d: u64) -> () {
+    let digits = "0123456789";
+    if 0 <= d && d <= 9 {
+        serial_write(digits[d]);
+    }
+}
+fn print_u64(val: u64) -> () {
+    let p = 10000000000000000000;
+    let d = 0;
+    let lz = true;
+    while p > 0 {
+        d = val / p;
+        val -= d * p;
+        if d != 0 || !lz {
+            print_digit(d);
+            lz = false;
+        }
+        p /= 10;
+    }
+}
+
+let ticks_ms: u64 = 0;
+fn interrupt_handler_timer() -> () {
+    ticks_ms += 1;
+}
+
+fn sleep(secs: u64) -> () {
+    let end = ticks_ms + secs * 1000;
+    while ticks_ms < end {}
+}
+
+fn fib(n: u64) -> u64 {
+    if n == 0 {
+        0
+    } else if n == 1 {
+        1
+    } else {
+        fib(n-1) + fib(n-2)
+    }
+}
+fn heavy_computation() -> () {
+    fib(30);
+}
+
+fn main() -> u64 {
+    let ivec_base = 0x8000000000000000;
+    let timer_ivec = (ivec_base + 0x100 * 1) as *u64;
+    *timer_ivec = interrupt_handler_timer as u64;
+    asm EnableIntr;
+
+    print("sleep 3 seconds ...\n");
+    sleep(3);
+    print("bye!\n");
+
+    // let start = ticks_ms;
+    // print("working ...\n");
+    // heavy_computation();
+    // let elapsed = ticks_ms - start;
+    // print("it took ");
+    // print_u64(elapsed);
+    // print(" [ms]\n");
+
+    0
+}
