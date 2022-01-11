@@ -23,8 +23,8 @@ for f in $files; do
 done
 echo ""
 
-# device IO is currently not supported by the asm VM
-files=$(find examples -name '*.wheel' -not -path '*mmio_*')
+# device IO and interruption is currently not supported by the asm VM
+files=$(find examples -name '*.wheel' -not -path '*mmio_*' -not -path '*interrupt*')
 
 echo "Running tests on x86_64 asm VM"
 (cd ../asm_vm_x86_64 && make)

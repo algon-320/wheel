@@ -65,6 +65,8 @@ pub enum Expr<E: ExprBound, T: TypeBound> {
     },
     LiteralString(Vec<u8>),
 
+    InlineAsm(spec::Instruction),
+
     AddrOf(Box<E>),
 
     Var(String),

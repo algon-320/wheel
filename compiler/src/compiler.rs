@@ -812,6 +812,10 @@ impl Compiler {
                 self.emit(Ir::Pointer(ptr));
             }
 
+            InlineAsm(i) => {
+                self.emit(i);
+            }
+
             Var(_) if expr_ty.size_of() == 0 => {}
             Var(name) => {
                 let (addr, var_ty) = match self.env.get(&name) {

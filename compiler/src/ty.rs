@@ -422,6 +422,8 @@ impl TypeChecker {
                 wrap(LiteralString(bytes), ty.into())
             }
 
+            InlineAsm(inst) => wrap(InlineAsm(inst), Type::Void.into()),
+
             Var(var_name) => match self.env.get(&var_name) {
                 Some(ty) => {
                     let ty = ty.clone();

@@ -1,7 +1,7 @@
 " Vim syntax file
 " Language: Wheel
 " Maintaner: algon-320 (algon.0320@gmail.com)
-" Latest Revision: Jan. 3, 2022
+" Latest Revision: Jan. 11, 2022
 
 if exists("b:current_syntax")
   finish
@@ -13,7 +13,7 @@ set cpo&vim
 syn keyword keyword fn
 syn keyword keyword let
 syn keyword struct struct
-syn keyword execution break continue return
+syn keyword execution break continue return asm
 syn keyword loop loop while for
 syn keyword cond if else
 syn keyword boolean true false

@@ -22,6 +22,7 @@ impl Base {
 enum Token {
     Fun,
     Struct,
+    Asm,
     If,
     Else,
     Loop,
@@ -86,7 +87,7 @@ peg::parser! { grammar tokenizer() for str {
     rule token() -> PosToken
         = (ws() / comment())*
           begin:position!() tok:(
-            fun() / struct_() / if_() / else_() / loop_() / while_() / for_() /
+            fun() / struct_() / asm() / if_() / else_() / loop_() / while_() / for_() /
             break_() / continue_() / return_() /
             let_() / as_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
@@ -99,6 +100,7 @@ peg::parser! { grammar tokenizer() for str {
 
     rule fun() -> Token = "fn" !alnum_() { Token::Fun }
     rule struct_() -> Token = "struct" !alnum_() { Token::Struct }
+    rule asm() -> Token = "asm" !alnum_() { Token::Asm }
     rule if_() -> Token = "if" !alnum_() { Token::If }
     rule else_() -> Token = "else" !alnum_() { Token::Else }
     rule loop_() -> Token = "loop" !alnum_() { Token::Loop }
@@ -334,6 +336,7 @@ peg::parser! { pub grammar parser() for [Token] {
             e:literal_slice_from_ptr() { e }
             e:literal_string() { e }
             e:variable() { e }
+            e:inline_asm() { e }
 
             e:@ [As] ty:ty() { wrap(Expr::Cast(e, ty)) }
 
@@ -404,6 +407,16 @@ peg::parser! { pub grammar parser() for [Token] {
     rule variable_def() -> Box<ParsedExpr>
         = [Let] [Ident(name)] [Equal] e1:expr()
         { wrap(Expr::Let { name, value: e1 }) }
+
+    rule inline_asm() -> Box<ParsedExpr>
+        = [Asm] [Ident(name)]
+        {?
+            use std::str::FromStr;
+            match spec::Instruction::from_str(&name) {
+                Ok(inst) => Ok(wrap(Expr::InlineAsm(inst))),
+                Err(_) => Err("invalid mnemonic"),
+            }
+        }
 
     rule if_expr() -> Box<ParsedExpr>
         = [If] then_cond:expr() then_block:block_expr()
