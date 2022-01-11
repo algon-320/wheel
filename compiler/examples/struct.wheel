@@ -4,7 +4,7 @@ struct Foo {
 }
 
 fn new_foo(a: u64, b: u64) -> Foo {
-    Foo { a: a, b: b }
+    $Foo { a: a, b: b }
 }
 
 fn double(f: *Foo) -> () {

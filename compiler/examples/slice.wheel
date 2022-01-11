@@ -27,7 +27,7 @@ fn main() -> u64 {
     let a = array();
     let s1 = &a[0..3];     // slice from array
     let s2 = [@ &a[0]; 3]; // slice from pointer
-    let foo = Foo { a: array() };
+    let foo = $Foo { a: array() };
 
     let res = [
         a[i],

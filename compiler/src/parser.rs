@@ -50,6 +50,7 @@ enum Token {
     Colon,
     SemiColon,
     Comma,
+    Dollar,
     Equal,
     Lt,
     Gt,
@@ -89,8 +90,8 @@ peg::parser! { grammar tokenizer() for str {
             break_() / continue_() / return_() /
             let_() / as_() / boolean() / paren() / arrow() /
             plus() / minus() / star() / slash() /
-            at() / dot() / colon() / semicolon() / comma() / equal() / lt() / gt() /
-            and() / pipe() / caret() / bang() /
+            at() / dot() / colon() / semicolon() / comma() / dollar() /
+            equal() / lt() / gt() / and() / pipe() / caret() / bang() /
             ident() / integer() / utf8_string() / ascii_char()
           ) end:position!()
           (ws() / comment())*
@@ -127,6 +128,7 @@ peg::parser! { grammar tokenizer() for str {
     rule colon() -> Token = ":" { Token::Colon }
     rule semicolon() -> Token = ";" { Token::SemiColon }
     rule comma() -> Token = "," { Token::Comma }
+    rule dollar() -> Token = "$" { Token::Dollar }
     rule equal() -> Token = "=" { Token::Equal }
     rule lt() -> Token = "<" { Token::Lt }
     rule gt() -> Token = ">" { Token::Gt }
@@ -390,7 +392,7 @@ peg::parser! { pub grammar parser() for [Token] {
         = [Str(s)] { wrap(Expr::LiteralString(s.into_bytes())) }
 
     rule literal_struct() -> Box<ParsedExpr>
-        = [Ident(name)] [LBrace] fields:(struct_field() ** [Comma]) [Comma]? [RBrace]
+        = [Dollar] [Ident(name)] [LBrace] fields:(struct_field() ** [Comma]) [Comma]? [RBrace]
         { wrap(Expr::LiteralStruct { name, fields }) }
 
     rule struct_field() -> (String, Box<ParsedExpr>)
