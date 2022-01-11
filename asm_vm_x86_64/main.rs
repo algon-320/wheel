@@ -7,7 +7,7 @@ extern "C" {
 }
 
 fn main() {
-    let mut memsize = 0x1000;
+    let mut memsize = 0x10000;
 
     let mut args = std::env::args();
     args.next(); // ignore executable name

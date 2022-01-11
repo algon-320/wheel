@@ -18,7 +18,7 @@ struct CliOpt {
     bin: PathBuf,
 
     /// memory size in bytes
-    #[structopt(short = "m", long = "mem", default_value = "4096")]
+    #[structopt(short = "m", long = "mem", default_value = "65536")]
     memory_size: usize,
 
     #[structopt(long = "debug")]
